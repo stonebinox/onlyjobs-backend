@@ -6,7 +6,6 @@ const router = express.Router();
 
 // Protected dev-only route to trigger scraping manually
 router.post("/test-scrape", async (req, res) => {
-  console.log("herex");
   try {
     await runDailyJobScraping();
     res.status(200).json({ message: "Scrape job run successfully" });

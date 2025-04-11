@@ -15,31 +15,31 @@ const sources = [
     url: "https://weworkremotely.com/categories/remote-programming-jobs",
     scraper: scrapeWeWorkRemotely,
   },
-  {
-    name: "Remotive",
-    url: "https://remotive.io/remote-jobs/software-dev",
-    scraper: scrapeRemotive,
-  },
-  {
-    name: "RemoteOK",
-    url: "https://remoteok.com/remote-dev-jobs",
-    scraper: scrapeRemoteOK,
-  },
-  {
-    name: "JSRemotely",
-    url: "https://jsremotely.com/remote-javascript-jobs",
-    scraper: scrapeJSRemotely,
-  },
-  {
-    name: "ReactJobsBoard",
-    url: "https://reactjobsboard.com/remote-react-jobs",
-    scraper: scrapeReactJobsBoard,
-  },
-  {
-    name: "NoDesk",
-    url: "https://nodesk.co/remote-jobs/programming/",
-    scraper: scrapeNoDesk,
-  },
+  // {
+  //   name: "Remotive",
+  //   url: "https://remotive.io/remote-jobs/software-dev",
+  //   scraper: scrapeRemotive,
+  // },
+  // {
+  //   name: "RemoteOK",
+  //   url: "https://remoteok.com/remote-dev-jobs",
+  //   scraper: scrapeRemoteOK,
+  // },
+  // {
+  //   name: "JSRemotely",
+  //   url: "https://jsremotely.com/remote-javascript-jobs",
+  //   scraper: scrapeJSRemotely,
+  // },
+  // {
+  //   name: "ReactJobsBoard",
+  //   url: "https://reactjobsboard.com/remote-react-jobs",
+  //   scraper: scrapeReactJobsBoard,
+  // },
+  // {
+  //   name: "NoDesk",
+  //   url: "https://nodesk.co/remote-jobs/",
+  //   scraper: scrapeNoDesk,
+  // },
 ];
 
 export async function runDailyJobScraping(): Promise<void> {
@@ -65,6 +65,8 @@ export async function runDailyJobScraping(): Promise<void> {
           await JobListing.create(job);
           existingURLs.add(normalizedUrl); // Add to set to catch dups in same batch
           console.log(`Saved new job: ${job.title} at ${job.company}`);
+        } else {
+          console.log(`Job already exists: ${job.title} at ${job.company}`);
         }
       }
     }
