@@ -1,46 +1,36 @@
-import JobListing from "../models/JobListing";
-import {
-  scrapeWeWorkRemotely,
-  scrapeRemotive,
-  scrapeRemoteOK,
-  scrapeJSRemotely,
-  scrapeReactJobsBoard,
-  scrapeNoDesk,
-} from "./scrapers";
+import OpenAI from "openai";
 
-// Sources to scrape jobs from
-const sources = [
-  {
-    name: "WeWorkRemotely",
-    url: "https://weworkremotely.com/categories/remote-programming-jobs",
-    scraper: scrapeWeWorkRemotely,
-  },
-  {
-    name: "RemoteOK",
-    url: "https://remoteok.com/remote-dev-jobs",
-    scraper: scrapeRemoteOK,
-  },
-  // {
-  //   name: "Remotive",
-  //   url: "https://remotive.io/remote-jobs/software-dev",
-  //   scraper: scrapeRemotive,
-  // },
-  // {
-  //   name: "JSRemotely",
-  //   url: "https://jsremotely.com/remote-javascript-jobs",
-  //   scraper: scrapeJSRemotely,
-  // },
-  // {
-  //   name: "ReactJobsBoard",
-  //   url: "https://reactjobsboard.com/remote-react-jobs",
-  //   scraper: scrapeReactJobsBoard,
-  // },
-  // {
-  //   name: "NoDesk",
-  //   url: "https://nodesk.co/remote-jobs/",
-  //   scraper: scrapeNoDesk,
-  // },
-];
+import JobListing from "../models/JobListing";
+import { jobDetailsExtractorInstructions } from "../utils/jobDetailsExtractorInstructions";
+import { scrapeWeWorkRemotely, scrapeRemoteOK } from "./scrapers";
+import { ScrapedJob } from "./scrapers";
+
+async function enrichJobWithOpenAI(job: ScrapedJob) {
+  try {
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "developer",
+          content: jobDetailsExtractorInstructions,
+        },
+        { role: "user", content: JSON.stringify(job) },
+      ],
+      temperature: 0.2,
+    });
+
+    const jsonText = response.choices[0].message?.content || "";
+    const parsed = JSON.parse(jsonText);
+
+    return parsed;
+  } catch (err: any) {
+    console.error("OpenAI enrichment failed:", err.message);
+    return null;
+  }
+}
 
 export async function runDailyJobScraping(): Promise<void> {
   console.log("Starting daily job scraping task...");
@@ -51,9 +41,42 @@ export async function runDailyJobScraping(): Promise<void> {
       existingJobs.map((j) => j.url.trim().toLowerCase())
     );
 
+    const sources = [
+      {
+        name: "WeWorkRemotely - Full Stack",
+        url: "https://weworkremotely.com/categories/remote-full-stack-programming-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Backend",
+        url: "https://weworkremotely.com/categories/remote-back-end-programming-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Design",
+        url: "https://weworkremotely.com/categories/remote-design-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Frontend",
+        url: "https://weworkremotely.com/categories/remote-front-end-programming-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - DevOps",
+        url: "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "RemoteOK",
+        url: "https://remoteok.com/remote-dev-jobs",
+        scraper: scrapeRemoteOK,
+      },
+    ];
+
     for (const source of sources) {
       console.log(`Scraping jobs from ${source.name}...`);
-      const jobs = await source.scraper();
+      const jobs = await source.scraper(source.url);
 
       for (const job of jobs) {
         job.source = source.name;
@@ -62,8 +85,23 @@ export async function runDailyJobScraping(): Promise<void> {
         const normalizedUrl = job.url.trim().toLowerCase();
 
         if (!existingURLs.has(normalizedUrl)) {
+          const enriched = await enrichJobWithOpenAI(job);
+
+          if (enriched) {
+            job.title = enriched.title || job.title;
+            job.company = enriched.company || job.company;
+            job.location = enriched.location || job.location;
+            job.source = enriched.source || job.source;
+            job.tags = enriched.tags || job.tags || [];
+            job.postedDate = new Date(enriched.postedDate || Date.now());
+            job.url = enriched.url;
+            job.description = enriched.description;
+            job.salary = enriched.salary;
+            job.scrapedDate = new Date(enriched.scrapedDate || Date.now());
+          }
+
           await JobListing.create(job);
-          existingURLs.add(normalizedUrl); // Add to set to catch dups in same batch
+          existingURLs.add(normalizedUrl);
           console.log(`Saved new job: ${job.title} at ${job.company}`);
         } else {
           console.log(`Job already exists: ${job.title} at ${job.company}`);
@@ -77,5 +115,4 @@ export async function runDailyJobScraping(): Promise<void> {
   }
 }
 
-// This function will be called by a scheduler
 export default runDailyJobScraping;

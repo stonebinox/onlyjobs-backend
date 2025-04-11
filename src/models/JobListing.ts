@@ -8,6 +8,7 @@ export interface IJobListing extends Document {
     min: number;
     max: number;
     currency: string;
+    estimated?: boolean;
   };
   tags: string[];
   source: string;
@@ -27,6 +28,7 @@ const JobListingSchema: Schema = new Schema(
     salary: {
       min: Number,
       max: Number,
+      estimated: { type: Boolean, default: false },
       currency: { type: String, default: "USD" },
     },
     tags: [String],

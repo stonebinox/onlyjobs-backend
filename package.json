@@ -21,7 +21,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.2",
     "node-cors": "^1.0.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "openai": "^4.93.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

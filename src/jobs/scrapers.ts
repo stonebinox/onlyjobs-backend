@@ -10,7 +10,13 @@ export interface ScrapedJob {
   url: string;
   tags?: string[];
   source: string;
-  postedAt?: string; // ISO 8601 if available
+  salary?: {
+    min?: number;
+    max?: number;
+    estimated?: boolean; // Indicates if the salary is estimated
+    currency?: string;
+  };
+  postedDate?: Date;
   scrapedDate?: Date; // Added field for tracking when job was scraped
 }
 
@@ -18,9 +24,8 @@ export interface ScrapedJob {
  * Scrapes jobs from WeWorkRemotely
  * HTML-based scraper
  */
-export async function scrapeWeWorkRemotely(): Promise<ScrapedJob[]> {
+export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
   try {
-    const url = "https://weworkremotely.com/categories/remote-programming-jobs";
     const response = await axios.get(url);
     const $ = load(response.data);
     const jobs: ScrapedJob[] = [];
@@ -205,8 +210,13 @@ export async function scrapeRemoteOK(): Promise<ScrapedJob[]> {
       company: job.company || "Unknown Company",
       location: job.location || "Remote",
       description: job.description,
-      url: `https://remoteok.com${job.url}`,
-      tags: job.tags || [],
+      url: job.url.startsWith("http")
+        ? job.url
+        : `https://remoteok.com${job.url}`,
+      tags:
+        job.tags?.length > 0
+          ? job.tags.map((tag: string) => tag.toLowerCase().trim())
+          : [],
       source: "RemoteOK",
       postedAt: job.date ? new Date(job.date).toISOString() : undefined,
       scrapedDate: new Date(), // Set the scraped date to the current date
@@ -263,11 +273,11 @@ export async function scrapeJSRemotely(): Promise<ScrapedJob[]> {
         .find(".date, .posted-date, .job-date")
         .text()
         .trim();
-      let postedAt: string | undefined = undefined;
+      let postedAt: Date | undefined = undefined;
 
       if (postedAtText) {
         try {
-          postedAt = new Date(postedAtText).toISOString();
+          postedAt = new Date(postedAtText);
         } catch (e) {
           // Invalid date format, ignore
         }
@@ -281,7 +291,7 @@ export async function scrapeJSRemotely(): Promise<ScrapedJob[]> {
           url: fullURL,
           tags,
           source: "JSRemotely",
-          postedAt,
+          postedDate: postedAt,
           scrapedDate: new Date(), // Set the scraped date to the current date
         });
       }
@@ -334,11 +344,11 @@ export async function scrapeReactJobsBoard(): Promise<ScrapedJob[]> {
 
       // Extract posted date if available
       const dateText = $(element).find(".date, .posted").text().trim();
-      let postedAt: string | undefined = undefined;
+      let postedAt: Date | undefined = undefined;
 
       if (dateText) {
         try {
-          postedAt = new Date(dateText).toISOString();
+          postedAt = new Date(dateText);
         } catch (e) {
           // Invalid date format
         }
@@ -352,7 +362,7 @@ export async function scrapeReactJobsBoard(): Promise<ScrapedJob[]> {
           url: jobURL,
           tags,
           source: "ReactJobsBoard",
-          postedAt,
+          postedDate: postedAt,
           scrapedDate: new Date(), // Set the scraped date to the current date
         });
       }
@@ -404,11 +414,11 @@ export async function scrapeNoDesk(): Promise<ScrapedJob[]> {
 
       // Try to extract posting date
       const dateText = $(element).find(".date, .posted-date").text().trim();
-      let postedAt: string | undefined = undefined;
+      let postedAt: Date | undefined = undefined;
 
       if (dateText) {
         try {
-          postedAt = new Date(dateText).toISOString();
+          postedAt = new Date(dateText);
         } catch (e) {
           // Invalid date format
         }
@@ -422,7 +432,7 @@ export async function scrapeNoDesk(): Promise<ScrapedJob[]> {
           url: jobURL,
           tags,
           source: "NoDesk",
-          postedAt,
+          postedDate: postedAt,
           scrapedDate: new Date(), // Set the scraped date to the current date
         });
       }
