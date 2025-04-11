@@ -15,15 +15,15 @@ const sources = [
     url: "https://weworkremotely.com/categories/remote-programming-jobs",
     scraper: scrapeWeWorkRemotely,
   },
+  {
+    name: "RemoteOK",
+    url: "https://remoteok.com/remote-dev-jobs",
+    scraper: scrapeRemoteOK,
+  },
   // {
   //   name: "Remotive",
   //   url: "https://remotive.io/remote-jobs/software-dev",
   //   scraper: scrapeRemotive,
-  // },
-  // {
-  //   name: "RemoteOK",
-  //   url: "https://remoteok.com/remote-dev-jobs",
-  //   scraper: scrapeRemoteOK,
   // },
   // {
   //   name: "JSRemotely",
