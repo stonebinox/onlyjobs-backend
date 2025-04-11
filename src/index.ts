@@ -5,6 +5,7 @@ import cron from "node-cron";
 import connectDB from "./utils/connectDB";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
+import devRoutes from "./routes/devRoutes";
 import runDailyJobScraping from "./jobs/scrapeJobs";
 import runDailyJobMatching from "./jobs/matchJobs";
 
@@ -28,6 +29,11 @@ app.use("/api/jobs", jobRoutes);
 app.get("/healthcheck", (req, res) => {
   res.send("API is running...");
 });
+
+console.log("NODE_ENV:", process.env.NODE_ENV);
+if (process.env.NODE_ENV !== "production") {
+  app.use("/dev", devRoutes);
+}
 
 // Schedule cron jobs
 // Run job scraping every day at 1:00 AM

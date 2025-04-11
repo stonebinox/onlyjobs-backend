@@ -1,5 +1,12 @@
 import JobListing from "../models/JobListing";
-import { IJobListing } from "../models/JobListing";
+import {
+  scrapeWeWorkRemotely,
+  scrapeRemotive,
+  scrapeRemoteOK,
+  scrapeJSRemotely,
+  scrapeReactJobsBoard,
+  scrapeNoDesk,
+} from "./scrapers";
 
 // Sources to scrape jobs from
 const sources = [
@@ -33,67 +40,30 @@ const sources = [
     url: "https://nodesk.co/remote-jobs/programming/",
     scraper: scrapeNoDesk,
   },
-  {
-    name: "RemoteFrontend",
-    url: "https://remotefrontend.io/remote-jobs",
-    scraper: scrapeRemoteFrontend,
-  },
 ];
-
-async function scrapeWeWorkRemotely(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for WeWorkRemotely
-  return [];
-}
-
-async function scrapeRemotive(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for Remotive
-  return [];
-}
-
-async function scrapeRemoteOK(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for RemoteOK
-  return [];
-}
-
-async function scrapeJSRemotely(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for JSRemotely
-  // JavaScript/Node-heavy focus
-  return [];
-}
-
-async function scrapeReactJobsBoard(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for ReactJobsBoard
-  return [];
-}
-
-async function scrapeNoDesk(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for NoDesk
-  return [];
-}
-
-async function scrapeRemoteFrontend(): Promise<Partial<IJobListing>[]> {
-  // TODO: Implement scraping logic for RemoteFrontend
-  return [];
-}
 
 export async function runDailyJobScraping(): Promise<void> {
   console.log("Starting daily job scraping task...");
 
   try {
+    const existingJobs = await JobListing.find({}, { url: 1 });
+    const existingURLs = new Set(
+      existingJobs.map((j) => j.url.trim().toLowerCase())
+    );
+
     for (const source of sources) {
       console.log(`Scraping jobs from ${source.name}...`);
       const jobs = await source.scraper();
 
-      // Process and save each job
       for (const job of jobs) {
         job.source = source.name;
         job.scrapedDate = new Date();
 
-        // Check if job already exists by URL to avoid duplicates
-        const existingJob = await JobListing.findOne({ url: job.url });
+        const normalizedUrl = job.url.trim().toLowerCase();
 
-        if (!existingJob) {
+        if (!existingURLs.has(normalizedUrl)) {
           await JobListing.create(job);
+          existingURLs.add(normalizedUrl); // Add to set to catch dups in same batch
           console.log(`Saved new job: ${job.title} at ${job.company}`);
         }
       }
