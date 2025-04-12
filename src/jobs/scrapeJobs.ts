@@ -2,7 +2,11 @@ import OpenAI from "openai";
 
 import JobListing from "../models/JobListing";
 import { jobDetailsExtractorInstructions } from "../utils/jobDetailsExtractorInstructions";
-import { scrapeWeWorkRemotely, scrapeRemoteOK } from "./scrapers";
+import {
+  scrapeWeWorkRemotely,
+  scrapeRemoteOK,
+  scrapeLandingJobs,
+} from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
 async function enrichJobWithOpenAI(job: ScrapedJob) {
@@ -71,6 +75,11 @@ export async function runDailyJobScraping(): Promise<void> {
         name: "RemoteOK",
         url: "https://remoteok.com/remote-dev-jobs",
         scraper: scrapeRemoteOK,
+      },
+      {
+        name: "Landing.jobs",
+        url: "https://landing.jobs/jobs",
+        scraper: scrapeLandingJobs,
       },
     ];
 

@@ -21,6 +21,110 @@ export interface ScrapedJob {
 }
 
 /**
+ * Scrapes jobs from landing.jobs
+ */
+export async function scrapeLandingJobs(url?: string): Promise<ScrapedJob[]> {
+  let page = 1;
+  const allJobs: ScrapedJob[] = [];
+
+  while (true) {
+    try {
+      // Construct the URL for the current page
+      url = `https://landing.jobs/jobs/search.json?page=${page}&match=all&country=&hd=false&t_co=false&t_st=false`;
+
+      // Fetch the page JSON data
+      const { data } = await axios.get(url, {
+        headers: {
+          accept: "application/json, text/javascript, */*; q=0.01",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 OPR/117.0.0.0",
+          "x-csrf-token":
+            "cb6c8mOO3NC93hQ9ta3OtCvW/qroT9EhAVKDF7j58yRhjLYegrc5NXbRHvlhR3WUVUu5jmCATyfy8rBgw+c/lg==",
+        },
+      });
+
+      // Check if we have any job offers
+      const offers = data.offers;
+      if (!offers || offers.length === 0) {
+        break; // No more jobs found, stop pagination
+      }
+
+      // Loop through each job and add it to the result
+      for (const offer of offers) {
+        // Extract the basic details for the job
+        const job = {
+          title: offer.title,
+          company: offer.company_name,
+          location: [offer.location || "Remote"],
+          url: offer.url,
+          source: "landing.jobs",
+          postedDate: new Date(offer.published_at),
+          scrapedDate: new Date(),
+          description: "", // Placeholder, will update this later
+          tags: offer.skills.map((skill: any) => skill.name),
+        };
+
+        // Fetch the detailed job page to extract additional data
+        const jobPageData = await fetchJobDetails(job.url);
+
+        // Merge the detailed data with the basic job data
+        if (jobPageData) {
+          job.description = jobPageData.description;
+        }
+
+        // Add the job to the result list
+        allJobs.push(job);
+      }
+
+      page += 1; // Move to the next page if there are more jobs
+    } catch (error) {
+      console.error("Error fetching landing.jobs API:", error);
+      break;
+    }
+  }
+
+  console.log(`Scraped ${allJobs.length} jobs from landing.jobs`);
+  return allJobs;
+}
+
+/**
+ * Fetches the detailed job data from the individual job page.
+ */
+async function fetchJobDetails(url: string) {
+  try {
+    // Fetch the HTML content of the job detail page
+    const { data } = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; JobScraper/1.0)" },
+    });
+
+    // Load the page HTML into Cheerio
+    const $ = load(data);
+
+    // Extract the second ld+json block containing the detailed job posting data
+    const jsonLdScript = $('script[type="application/ld+json"]').eq(1).html();
+
+    if (jsonLdScript) {
+      const jobData = JSON.parse(jsonLdScript);
+
+      // Extract relevant details from the JSON-LD data
+      return {
+        description: jobData.description || "",
+        skills: jobData.skills || [],
+        experience: jobData.experienceRequirements
+          ? jobData.experienceRequirements.monthsOfExperience
+          : null,
+        jobType: jobData.employmentType || "",
+      };
+    } else {
+      throw new Error("Detailed job data not found");
+    }
+  } catch (error) {
+    console.error(`Error fetching job details for URL ${url}:`, error);
+    return null;
+  }
+}
+
+/**
  * Scrapes jobs from WeWorkRemotely
  * HTML-based scraper
  */
