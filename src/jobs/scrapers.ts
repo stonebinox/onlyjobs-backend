@@ -5,7 +5,7 @@ import { load } from "cheerio";
 export interface ScrapedJob {
   title: string;
   company: string;
-  location: string;
+  location: string[];
   description?: string;
   url: string;
   tags?: string[];
@@ -123,6 +123,9 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
         jobs.push({
           ...job,
           description,
+          location: job.location.includes(",")
+            ? job.location.split(",")
+            : [job.location],
           source: "WeWorkRemotely",
           scrapedDate: new Date(),
         });
@@ -287,7 +290,7 @@ export async function scrapeJSRemotely(): Promise<ScrapedJob[]> {
         jobs.push({
           title,
           company,
-          location,
+          location: location.includes(",") ? location.split(",") : [location],
           url: fullURL,
           tags,
           source: "JSRemotely",
@@ -358,7 +361,7 @@ export async function scrapeReactJobsBoard(): Promise<ScrapedJob[]> {
         jobs.push({
           title,
           company,
-          location,
+          location: location.includes(",") ? location.split(",") : [location],
           url: jobURL,
           tags,
           source: "ReactJobsBoard",
@@ -428,7 +431,7 @@ export async function scrapeNoDesk(): Promise<ScrapedJob[]> {
         jobs.push({
           title,
           company,
-          location,
+          location: location.includes(",") ? location.split(",") : [location],
           url: jobURL,
           tags,
           source: "NoDesk",

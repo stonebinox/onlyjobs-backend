@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IJobListing extends Document {
   title: string;
   company: string;
-  location: string;
+  location: string[];
   salary: {
     min: number;
     max: number;
@@ -24,7 +24,7 @@ const JobListingSchema: Schema = new Schema(
   {
     title: { type: String, required: true },
     company: { type: String, required: true },
-    location: { type: String, required: true },
+    location: { type: [String], required: true },
     salary: {
       min: Number,
       max: Number,

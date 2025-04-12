@@ -33,7 +33,7 @@ async function enrichJobWithOpenAI(job: ScrapedJob) {
 }
 
 export async function runDailyJobScraping(): Promise<void> {
-  console.log("Starting daily job scraping task...");
+  console.time("Job scraper");
 
   try {
     const existingJobs = await JobListing.find({}, { url: 1 });
@@ -82,7 +82,12 @@ export async function runDailyJobScraping(): Promise<void> {
         job.source = source.name;
         job.scrapedDate = new Date();
 
-        const normalizedUrl = job.url.trim().toLowerCase();
+        if (!job.url || job.url.trim() === "") {
+          console.error("Job URL is missing:", job);
+          continue;
+        }
+
+        const normalizedUrl = job.url?.trim().toLowerCase();
 
         if (!existingURLs.has(normalizedUrl)) {
           const enriched = await enrichJobWithOpenAI(job);
@@ -94,7 +99,7 @@ export async function runDailyJobScraping(): Promise<void> {
             job.source = enriched.source || job.source;
             job.tags = enriched.tags || job.tags || [];
             job.postedDate = new Date(enriched.postedDate || Date.now());
-            job.url = enriched.url;
+            job.url = enriched.url || job.url;
             job.description = enriched.description;
             job.salary = enriched.salary;
             job.scrapedDate = new Date(enriched.scrapedDate || Date.now());
@@ -108,10 +113,10 @@ export async function runDailyJobScraping(): Promise<void> {
         }
       }
     }
-
-    console.log("Job scraping completed successfully");
   } catch (error) {
     console.error("Error during job scraping:", error);
+  } finally {
+    console.timeEnd("Job scraper");
   }
 }
 
