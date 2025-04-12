@@ -24,38 +24,32 @@ export const authenticateUser = asyncHandler(
     }
 
     // we find user by email to see if one exists
-    try {
-      let user = await findUserByEmail(email);
-      const encryptedPassword = await bcrypt.hash(password, saltRounds);
+    let user = await findUserByEmail(email);
+    const encryptedPassword = await bcrypt.hash(password, saltRounds);
 
-      if (!user) {
-        // we create the user
-        user = await User.create({
-          email,
-          password: encryptedPassword,
-        });
-      } else {
-        // we check if the password is correct
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-          res.status(401);
-          throw new Error("Invalid email or password");
-        }
-      }
-
-      // we generate a token
-      const token = generateToken(user.id);
-
-      res.status(200).json({
-        id: user.id,
-        token: token,
+    if (!user) {
+      // we create the user
+      user = await User.create({
+        email,
+        password: encryptedPassword,
       });
-    } catch (e) {
-      console.error(e);
-      res.status(500);
-      throw new Error("Error finding user");
+    } else {
+      // we check if the password is correct
+      const isMatch = await bcrypt.compare(password, user.password);
+
+      if (!isMatch) {
+        res.status(401);
+        throw new Error("Invalid email or password");
+      }
     }
+
+    // we generate a token
+    const token = generateToken(user.id);
+
+    res.status(200).json({
+      id: user.id,
+      token: token,
+    });
   }
 );
 
