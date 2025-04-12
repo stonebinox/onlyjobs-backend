@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
   name: string;
@@ -9,7 +9,12 @@ export interface IUser extends Document {
     experience: string[];
     education: string[];
     summary: string;
-    // more fields will be added when we implement resume parsing
+    certifications: string[]; // New field for certifications
+    languages: string[]; // New field for languages
+    projects: string[]; // New field for projects
+    achievements: string[]; // New field for personal or professional achievements
+    volunteerExperience: string[]; // New field for volunteer work
+    interests: string[]; // New field for personal interests
   };
   preferences: {
     jobTypes: string[];
@@ -33,6 +38,12 @@ const UserSchema: Schema = new Schema(
       experience: [String],
       education: [String],
       summary: String,
+      certifications: [String], // Add certifications field
+      languages: [String], // Add languages field
+      projects: [String], // Add projects field
+      achievements: [String], // Add achievements field
+      volunteerExperience: [String], // Add volunteer experience field
+      interests: [String], // Add interests field
     },
     preferences: {
       jobTypes: [String],
@@ -41,9 +52,9 @@ const UserSchema: Schema = new Schema(
       minSalary: { type: Number, default: 0 },
       industries: [String],
     },
-    skippedJobs: [{ type: Schema.Types.ObjectId, ref: 'JobListing' }],
+    skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
   },
   { timestamps: true }
 );
 
-export default mongoose.model<IUser>('User', UserSchema);
+export default mongoose.model<IUser>("User", UserSchema);
