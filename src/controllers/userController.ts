@@ -3,7 +3,7 @@ import asyncHandler from "express-async-handler";
 import bcrypt from "bcrypt";
 
 import User from "../models/User";
-import { findUserByEmail } from "../services/userService";
+import { findUserByEmail, getUserNameById } from "../services/userService";
 import { generateToken } from "../utils/generateToken";
 
 const saltRounds = 10;
@@ -53,48 +53,16 @@ export const authenticateUser = asyncHandler(
   }
 );
 
-// @desc    Register a new user
-// @route   POST /api/users/register
-// @access  Public
-export const registerUser = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { name, email, password } = req.body;
+// @desc    Get user's name
+// @route   GET /api/users/username
+// @access  Private
+export const getUserName = asyncHandler(async (req: Request, res: Response) => {
+  const username = await getUserNameById(req.user?.id);
 
-    // Check if user exists
-    // Hash password
-    // Create user
-    // TODO: Implement user registration logic
-
-    res.status(201).json({
-      message: "User registered successfully",
-    });
-  }
-);
-
-// @desc    Authenticate user & get token
-// @route   POST /api/users/login
-// @access  Public
-export const loginUser = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-
-  // TODO: Implement login logic
-
-  res.json({
-    message: "Login successful",
+  res.status(200).json({
+    username,
   });
 });
-
-// @desc    Get user profile
-// @route   GET /api/users/profile
-// @access  Private
-export const getUserProfile = asyncHandler(
-  async (req: Request, res: Response) => {
-    // TODO: Implement get profile logic
-    res.json({
-      message: "User profile retrieved",
-    });
-  }
-);
 
 // @desc    Update user profile
 // @route   PUT /api/users/profile
