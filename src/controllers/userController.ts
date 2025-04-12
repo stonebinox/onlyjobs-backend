@@ -1,8 +1,63 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
+import bcrypt from "bcrypt";
+
 import User from "../models/User";
-import MatchRecord from "../models/MatchRecord";
-import mongoose from "mongoose";
+import { findUserByEmail } from "../services/userService";
+import { generateToken } from "../utils/generateToken";
+
+const saltRounds = 10;
+
+export const authenticateUser = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+
+    if (
+      !email ||
+      !password ||
+      email.trim() === "" ||
+      password.trim() === "" ||
+      password.length < 8
+    ) {
+      res.status(400);
+      throw new Error("Please provide valid email and password");
+    }
+
+    // we find user by email to see if one exists
+    try {
+      let user = await findUserByEmail(email);
+      const encryptedPassword = await bcrypt.hash(password, saltRounds);
+
+      if (!user) {
+        // we create the user
+        user = await User.create({
+          email,
+          password: encryptedPassword,
+        });
+      } else {
+        // we check if the password is correct
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+          res.status(401);
+          throw new Error("Invalid email or password");
+        }
+      }
+
+      // we generate a token
+      const token = generateToken(user.id);
+
+      res.status(200).json({
+        id: user.id,
+        token: token,
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500);
+      throw new Error("Error finding user");
+    }
+  }
+);
 
 // @desc    Register a new user
 // @route   POST /api/users/register

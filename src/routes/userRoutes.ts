@@ -8,11 +8,13 @@ import {
   uploadResume,
   skipJob,
   getMatches,
+  authenticateUser,
 } from "../controllers/userController";
 
 const router = express.Router();
 
-// Public routes
+// Public routes+
+router.post("/authenticate", authenticateUser);
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 
