@@ -6,9 +6,13 @@ import {
   getJobById,
   trackJobClick,
   searchJobs,
+  getAvailableJobCount,
 } from "../controllers/jobController";
 
 const router = express.Router();
+
+// Unprotected routes
+router.get("/available-count", getAvailableJobCount);
 
 // Protected routes
 router.get("/", protect, getJobs);

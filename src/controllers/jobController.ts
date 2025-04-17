@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
+
 import JobListing from "../models/JobListing";
 import MatchRecord from "../models/MatchRecord";
 import mongoose from "mongoose";
@@ -45,3 +46,20 @@ export const searchJobs = asyncHandler(async (req: Request, res: Response) => {
     message: "Search results retrieved",
   });
 });
+
+// @desc    Get the count of available job listings
+// @route   GET /api/jobs/available-count
+// @access  Public
+export const getAvailableJobCount = asyncHandler(
+  async (req: Request, res: Response) => {
+    // Find count of job listings that have been fetched in the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const jobCount = await JobListing.countDocuments({
+      createdAt: { $gte: thirtyDaysAgo },
+    });
+
+    res.json({ count: jobCount });
+  }
+);
