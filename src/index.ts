@@ -2,6 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cron from "node-cron";
+import bodyParser from "body-parser";
+
 import connectDB from "./utils/connectDB";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
@@ -19,7 +21,17 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+// Configure express to handle larger payloads for file uploads
+app.use(
+  express.json({
+    limit: "10mb",
+    type: (req) => {
+      return req.headers["content-type"]?.startsWith("application/json");
+    },
+  })
+);
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Routes
 app.use("/api/users", userRoutes);

@@ -214,7 +214,6 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
         await jobPage.goto(job.url, { waitUntil: "networkidle2" });
 
         const description = await jobPage.evaluate(() => {
-          console.log("herex");
           const blocks: string[] = [];
           document
             .querySelectorAll(

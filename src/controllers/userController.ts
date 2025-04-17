@@ -1,9 +1,15 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcrypt";
+import path from "path";
+import fs from "fs";
 
 import User from "../models/User";
-import { findUserByEmail, getUserNameById } from "../services/userService";
+import {
+  findUserByEmail,
+  getUserNameById,
+  parseUserCV,
+} from "../services/userService";
 import { generateToken } from "../utils/generateToken";
 
 const saltRounds = 10;
@@ -78,6 +84,92 @@ export const getActiveUserCount = asyncHandler(
   }
 );
 
+// @desc    Update user's CV - will be parsed by AI
+// @route   POST /api/users/cv
+// @access  Private
+export const updateUserCV = asyncHandler(
+  async (req: Request, res: Response) => {
+    // Check if file exists in the request
+    if (!req.file) {
+      res.status(400);
+      throw new Error("Please upload a file");
+    }
+
+    const userId = req.user?.id;
+    const file = req.file;
+
+    // Check file type
+    const allowedFileTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+
+    if (!allowedFileTypes.includes(file.mimetype)) {
+      res.status(400);
+      throw new Error("Please upload a PDF or Word document");
+    }
+
+    try {
+      const uploadDir = path.join(__dirname, "../../uploads/cvs");
+
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const fileExtension = path.extname(file.originalname);
+      const fileName = `${userId}-${Date.now()}${fileExtension}`;
+      const filePath = path.join(uploadDir, fileName);
+      fs.writeFileSync(filePath, file.buffer);
+      const parsedCV = await parseUserCV(filePath);
+
+      const updatePayload: any = {
+        resume: parsedCV.resume,
+      };
+
+      if (parsedCV.name) {
+        updatePayload.name = parsedCV.name;
+      }
+
+      if (parsedCV.location) {
+        updatePayload["preferences.location"] = [parsedCV.location];
+        updatePayload["preferences.remoteOnly"] =
+          parsedCV.location.toLowerCase() === "remote";
+      }
+
+      if (parsedCV.preferences) {
+        updatePayload.preferences = {
+          ...updatePayload.preferences,
+          ...parsedCV.preferences,
+        };
+      }
+
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        {
+          name: parsedCV.name,
+          resume: parsedCV.resume,
+          preferences: parsedCV.preferences,
+        },
+        { new: true }
+      );
+
+      if (!updatedUser) {
+        res.status(404);
+        throw new Error("User not found");
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "CV uploaded successfully",
+      });
+    } catch (error) {
+      console.error("Error saving CV:", error);
+      res.status(500);
+      throw new Error("Error saving CV");
+    }
+  }
+);
+
 // @desc    Update user profile
 // @route   PUT /api/users/profile
 // @access  Private
@@ -86,18 +178,6 @@ export const updateUserProfile = asyncHandler(
     // TODO: Implement update profile logic
     res.json({
       message: "User profile updated",
-    });
-  }
-);
-
-// @desc    Upload and parse user resume
-// @route   POST /api/users/resume
-// @access  Private
-export const uploadResume = asyncHandler(
-  async (req: Request, res: Response) => {
-    // TODO: Implement resume upload and parsing with OpenAI
-    res.json({
-      message: "Resume uploaded and parsed",
     });
   }
 );
