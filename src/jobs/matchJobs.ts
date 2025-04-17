@@ -1,7 +1,8 @@
 import User from "../models/User";
 import JobListing from "../models/JobListing";
 import MatchRecord from "../models/MatchRecord";
-import { matchUserToJob, filterJobsForUser } from "../services/matchingService";
+import { matchUserToJob } from "../services/matchingService";
+import { filterJobsForUser } from "../utils/filterJobsForUser";
 
 export async function runDailyJobMatching(): Promise<void> {
   console.log("Starting daily job matching task...");
@@ -12,11 +13,11 @@ export async function runDailyJobMatching(): Promise<void> {
     console.log(`Found ${users.length} users to match with jobs`);
 
     // Get jobs from the past week only
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
     const recentJobs = await JobListing.find({
-      scrapedDate: { $gte: oneWeekAgo },
+      postedDate: { $gte: oneMonthAgo },
     });
 
     console.log(`Found ${recentJobs.length} recent jobs to match`);
@@ -25,26 +26,26 @@ export async function runDailyJobMatching(): Promise<void> {
     for (const user of users) {
       console.log(`Processing matches for user: ${user.email}`);
 
-      // Filter out jobs the user has already skipped
       const eligibleJobs = filterJobsForUser(recentJobs, user);
-
-      // Get existing matches to avoid duplicates
       const existingMatches = await MatchRecord.find({ userId: user._id });
       const matchedJobIds = new Set(
         existingMatches.map((match) => match.jobId.toString())
       );
 
-      // Process each job for this user
       for (const job of eligibleJobs) {
-        // Skip if we already have a match record
         if (matchedJobIds.has(job.id.toString())) {
           continue;
         }
 
-        // Perform the matching using AI
         const matchResult = await matchUserToJob(user, job);
 
-        // Save the match result
+        if (matchResult.matchScore < 25) {
+          console.log(
+            `Skipping job ${job.title} for user ${user.email} - Score: ${matchResult.matchScore}`
+          );
+          continue;
+        }
+
         await MatchRecord.create({
           userId: user._id,
           jobId: job._id,
@@ -67,5 +68,4 @@ export async function runDailyJobMatching(): Promise<void> {
   }
 }
 
-// This function will be called by a scheduler
 export default runDailyJobMatching;

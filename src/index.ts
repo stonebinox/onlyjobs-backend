@@ -53,9 +53,9 @@ cron.schedule("0 1 * * *", () => {
 });
 
 // Run job matching every day at 3:00 AM
-// cron.schedule("0 3 * * *", () => {
-//   runDailyJobMatching();
-// });
+cron.schedule("0 3 * * *", () => {
+  runDailyJobMatching();
+});
 
 // Error handler middleware
 app.use(

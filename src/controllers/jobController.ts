@@ -57,7 +57,7 @@ export const getAvailableJobCount = asyncHandler(
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const jobCount = await JobListing.countDocuments({
-      createdAt: { $gte: thirtyDaysAgo },
+      postedDate: { $gte: thirtyDaysAgo },
     });
 
     res.json({ count: jobCount });
