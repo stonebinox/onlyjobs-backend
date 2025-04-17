@@ -1,9 +1,7 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
-import mongoose from "mongoose";
 
 import JobListing from "../models/JobListing";
-import MatchRecord from "../models/MatchRecord";
 
 // @desc    Get all jobs for a user (filtered by their matches)
 // @route   GET /api/jobs

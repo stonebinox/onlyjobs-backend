@@ -2,12 +2,12 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cron from "node-cron";
-import bodyParser from "body-parser";
 
 import connectDB from "./utils/connectDB";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import devRoutes from "./routes/devRoutes";
+import matchRoutes from "./routes/matchRoutes";
 import runDailyJobScraping from "./jobs/scrapeJobs";
 import runDailyJobMatching from "./jobs/matchJobs";
 
@@ -36,6 +36,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Routes
 app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
+app.use("/api/matches", matchRoutes);
 
 // Basic health check route
 app.get("/healthcheck", (req, res) => {

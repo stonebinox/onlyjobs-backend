@@ -191,13 +191,3 @@ export const skipJob = asyncHandler(async (req: Request, res: Response) => {
     message: "Job skipped successfully",
   });
 });
-
-// @desc    Get user's job matches
-// @route   GET /api/users/matches
-// @access  Private
-export const getMatches = asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Implement getting matches logic
-  res.json({
-    message: "Job matches retrieved",
-  });
-});

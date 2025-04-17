@@ -6,7 +6,6 @@ import {
   updateUserCV,
   updateUserProfile,
   skipJob,
-  getMatches,
 } from "../controllers/userController";
 
 import upload from "../middlewares/fileUpload";
@@ -23,6 +22,5 @@ router.get("/active-count", protect, getActiveUserCount);
 router.put("/profile", protect, updateUserProfile);
 router.post("/cv", protect, upload.single("file"), updateUserCV);
 router.post("/skip/:jobId", protect, skipJob);
-router.get("/matches", protect, getMatches);
 
 export default router;
