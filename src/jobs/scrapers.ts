@@ -1,5 +1,6 @@
 import axios from "axios";
 import { load } from "cheerio";
+import puppeteer from "puppeteer";
 
 // Common interface for all scraped jobs
 export interface ScrapedJob {
@@ -129,98 +130,106 @@ async function fetchJobDetails(url: string) {
  * HTML-based scraper
  */
 export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+
   try {
-    const response = await axios.get(url);
-    const $ = load(response.data);
-    const jobs: ScrapedJob[] = [];
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    );
+    await page.goto(url, { waitUntil: "networkidle2" });
 
-    const jobLinks: {
-      title: string;
-      company: string;
-      location: string;
-      url: string;
-      tags: string[];
-      postedAt?: string;
-    }[] = [];
+    const jobLinks = await page.evaluate(() => {
+      const results: {
+        title: string;
+        company: string;
+        location: string;
+        url: string;
+        tags: string[];
+        postedAt?: string;
+      }[] = [];
 
-    $("section.jobs li.new-listing-container").each((_, element) => {
-      const jobEl = $(element);
-      const anchor = jobEl.find("a").eq(1);
-      const rawHref = anchor.attr("href") || "";
+      const listings = document.querySelectorAll(
+        "section.jobs li.new-listing-container"
+      );
 
-      // Skip external/ad links
-      if (!rawHref.startsWith("/")) {
-        console.log("Skipping external/ad link:", rawHref);
-        return;
-      }
+      listings.forEach((el) => {
+        const anchor = el.querySelectorAll("a")[1];
+        const rawHref = anchor?.getAttribute("href") || "";
+        if (!rawHref.startsWith("/remote-jobs/")) return;
 
-      if (!rawHref.startsWith("/remote-jobs/")) {
-        console.log("Skipping non-job link:", rawHref);
-        return;
-      }
+        const jobURL = `https://weworkremotely.com${rawHref}`;
+        const title =
+          el
+            .querySelector("h4.new-listing__header__title")
+            ?.textContent?.trim() || "";
+        const company =
+          el
+            .querySelector("p.new-listing__company-name")
+            ?.textContent?.trim() || "";
+        const location =
+          el
+            .querySelector("p.new-listing__company-headquarters")
+            ?.textContent?.trim() || "Remote";
 
-      const jobURL = `https://weworkremotely.com${rawHref}`;
-      const title = jobEl.find("h4.new-listing__header__title").text().trim();
-      const company = jobEl.find("p.new-listing__company-name").text().trim();
-      const location =
-        jobEl.find("p.new-listing__company-headquarters").text().trim() ||
-        "Remote";
+        const tags: string[] = [];
+        el.querySelectorAll(".new-listing__categories__category").forEach(
+          (tagEl) => {
+            const tag = tagEl.textContent?.trim();
+            if (tag) tags.push(tag);
+          }
+        );
 
-      const tags: string[] = [];
-      jobEl.find(".new-listing__categories__category").each((_, el) => {
-        const tag = $(el).text().trim();
-        if (tag) tags.push(tag);
-      });
-
-      const postedAtText = jobEl
-        .find(".new-listing__header__icons__date")
-        .text()
-        .trim();
-      let postedAt: string | undefined = undefined;
-      if (postedAtText) {
-        const now = new Date();
+        const postedAtText =
+          el
+            .querySelector(".new-listing__header__icons__date")
+            ?.textContent?.trim() || "";
+        let postedAt: string | undefined = undefined;
         const daysAgo = parseInt(postedAtText.replace(/[^\d]/g, ""), 10);
         if (!isNaN(daysAgo)) {
-          const date = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+          const date = new Date(Date.now() - daysAgo * 86400000);
           postedAt = date.toISOString();
         }
-      }
 
-      if (title && company && jobURL) {
-        jobLinks.push({
-          title,
-          company,
-          location,
-          url: jobURL,
-          tags,
-          postedAt,
-        });
-      }
+        if (title && company) {
+          results.push({
+            title,
+            company,
+            location,
+            url: jobURL,
+            tags,
+            postedAt,
+          });
+        }
+      });
+
+      return results;
     });
 
-    // Second pass: fetch each job page to get description
+    const jobs: ScrapedJob[] = [];
+
     for (const job of jobLinks) {
       try {
-        const jobPage = await axios.get(job.url, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; JobScraper/1.0)",
-          },
+        const jobPage = await browser.newPage();
+        await jobPage.goto(job.url, { waitUntil: "networkidle2" });
+
+        const description = await jobPage.evaluate(() => {
+          console.log("herex");
+          const blocks: string[] = [];
+          document
+            .querySelectorAll(
+              ".lis-container__job__content__description div, p, li"
+            )
+            .forEach((el) => {
+              const text = el.textContent?.trim();
+              if (text) blocks.push(text);
+            });
+
+          return blocks.join("\n");
         });
-        const $$ = load(jobPage.data);
-
-        // Extract and clean description
-        const descriptionBlocks: string[] = [];
-        $$(".lis-container__job__content__description")
-          .find("div, p, li")
-          .each((_, el) => {
-            const text = $$(el).text().trim();
-            if (text) descriptionBlocks.push(text);
-          });
-
-        const description = descriptionBlocks.join("\n");
 
         if (!description) {
-          console.warn("Could not find description for:", job.url);
+          console.warn("Missing description for", job.url);
           continue;
         }
 
@@ -228,25 +237,27 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
           ...job,
           description,
           location: job.location.includes(",")
-            ? job.location.split(",")
+            ? job.location.split(",").map((l) => l.trim())
             : [job.location],
           source: "WeWorkRemotely",
           scrapedDate: new Date(),
         });
-      } catch (err: any) {
-        console.warn(
-          "Failed to fetch job description for",
-          job.url,
-          err.message
-        );
+
+        await jobPage.close();
+      } catch (err) {
+        console.warn("Failed to extract job detail from", job.url, err);
       }
     }
 
-    console.log(`Scraped ${jobs.length} jobs from WeWorkRemotely`);
+    console.log(
+      `Scraped ${jobs.length} jobs from WeWorkRemotely with Puppeteer`
+    );
     return jobs;
-  } catch (error) {
-    console.error("Error scraping WeWorkRemotely:", error);
+  } catch (err) {
+    console.error("WWR Puppeteer scrape error:", err);
     return [];
+  } finally {
+    await browser.close();
   }
 }
 

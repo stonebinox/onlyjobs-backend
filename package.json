@@ -23,7 +23,8 @@
     "mongoose": "^8.13.2",
     "node-cors": "^1.0.0",
     "node-cron": "^3.0.3",
-    "openai": "^4.93.0"
+    "openai": "^4.93.0",
+    "puppeteer": "^24.6.1"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
