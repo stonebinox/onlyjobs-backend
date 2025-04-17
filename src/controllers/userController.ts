@@ -33,6 +33,7 @@ export const authenticateUser = asyncHandler(
         email,
         password: encryptedPassword,
       });
+      // TODO: send verification email when we integrate email service
     } else {
       // we check if the password is correct
       const isMatch = await bcrypt.compare(password, user.password);
@@ -63,6 +64,19 @@ export const getUserName = asyncHandler(async (req: Request, res: Response) => {
     username,
   });
 });
+
+// @desc    Get active user count
+// @route   GET /api/users/active-count
+// @access  Private
+export const getActiveUserCount = asyncHandler(
+  async (req: Request, res: Response) => {
+    const activeUserCount = await User.countDocuments({ isVerified: true });
+
+    res.status(200).json({
+      activeUserCount,
+    });
+  }
+);
 
 // @desc    Update user profile
 // @route   PUT /api/users/profile

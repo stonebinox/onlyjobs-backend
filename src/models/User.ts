@@ -26,6 +26,7 @@ export interface IUser extends Document {
   skippedJobs: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
+  isVerified: boolean; // New field for email verification status
 }
 
 const UserSchema: Schema = new Schema(
@@ -53,6 +54,7 @@ const UserSchema: Schema = new Schema(
       industries: [String],
     },
     skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
+    isVerified: { type: Boolean, default: false }, // New field for email verification status
   },
   { timestamps: true }
 );
