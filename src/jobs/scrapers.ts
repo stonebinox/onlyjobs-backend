@@ -1,5 +1,5 @@
 import axios from "axios";
-import { load } from "cheerio";
+import { BasicAcceptedElems, load } from "cheerio";
 import puppeteer from "puppeteer";
 
 // Common interface for all scraped jobs
@@ -174,7 +174,7 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
 
         const tags: string[] = [];
         el.querySelectorAll(".new-listing__categories__category").forEach(
-          (tagEl) => {
+          (tagEl: Element | HTMLElement) => {
             const tag = tagEl.textContent?.trim();
             if (tag) tags.push(tag);
           }
@@ -219,7 +219,7 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
             .querySelectorAll(
               ".lis-container__job__content__description div, p, li"
             )
-            .forEach((el) => {
+            .forEach((el: Element | HTMLElement) => {
               const text = el.textContent?.trim();
               if (text) blocks.push(text);
             });
@@ -236,7 +236,7 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
           ...job,
           description,
           location: job.location.includes(",")
-            ? job.location.split(",").map((l) => l.trim())
+            ? job.location.split(",").map((l: string) => l.trim())
             : [job.location],
           source: "WeWorkRemotely",
           scrapedDate: new Date(),
@@ -359,60 +359,66 @@ export async function scrapeJSRemotely(): Promise<ScrapedJob[]> {
     const jobs: ScrapedJob[] = [];
 
     // JSRemotely typically has job listings in card-like structures
-    $(".job-card, .job-listing, .job-item").each((_, element) => {
-      const title = $(element).find(".job-title, h2, h3").first().text().trim();
-      const company = $(element)
-        .find(".company-name, .company")
-        .first()
-        .text()
-        .trim();
-      const locationElement = $(element).find(".location, .job-location");
-      const location = locationElement.length
-        ? locationElement.text().trim()
-        : "Remote";
+    $(".job-card, .job-listing, .job-item").each(
+      (_: number, element: BasicAcceptedElems<any>) => {
+        const title = $(element)
+          .find(".job-title, h2, h3")
+          .first()
+          .text()
+          .trim();
+        const company = $(element)
+          .find(".company-name, .company")
+          .first()
+          .text()
+          .trim();
+        const locationElement = $(element).find(".location, .job-location");
+        const location = locationElement.length
+          ? locationElement.text().trim()
+          : "Remote";
 
-      // Extract job URL
-      const jobURL = $(element).find("a").attr("href") || "";
-      const fullURL = jobURL.startsWith("http")
-        ? jobURL
-        : `https://jsremotely.com${jobURL}`;
+        // Extract job URL
+        const jobURL = $(element).find("a").attr("href") || "";
+        const fullURL = jobURL.startsWith("http")
+          ? jobURL
+          : `https://jsremotely.com${jobURL}`;
 
-      // Extract tags if available
-      const tags: string[] = [];
-      $(element)
-        .find(".tags .tag, .skills span")
-        .each((_, tagElement) => {
-          tags.push($(tagElement).text().trim());
-        });
+        // Extract tags if available
+        const tags: string[] = [];
+        $(element)
+          .find(".tags .tag, .skills span")
+          .each((_: number, tagElement: BasicAcceptedElems<any>) => {
+            tags.push($(tagElement).text().trim());
+          });
 
-      // Try to find posted date
-      const postedAtText = $(element)
-        .find(".date, .posted-date, .job-date")
-        .text()
-        .trim();
-      let postedAt: Date | undefined = undefined;
+        // Try to find posted date
+        const postedAtText = $(element)
+          .find(".date, .posted-date, .job-date")
+          .text()
+          .trim();
+        let postedAt: Date | undefined = undefined;
 
-      if (postedAtText) {
-        try {
-          postedAt = new Date(postedAtText);
-        } catch (e) {
-          // Invalid date format, ignore
+        if (postedAtText) {
+          try {
+            postedAt = new Date(postedAtText);
+          } catch (e) {
+            // Invalid date format, ignore
+          }
+        }
+
+        if (title && company && fullURL) {
+          jobs.push({
+            title,
+            company,
+            location: location.includes(",") ? location.split(",") : [location],
+            url: fullURL,
+            tags,
+            source: "JSRemotely",
+            postedDate: postedAt,
+            scrapedDate: new Date(), // Set the scraped date to the current date
+          });
         }
       }
-
-      if (title && company && fullURL) {
-        jobs.push({
-          title,
-          company,
-          location: location.includes(",") ? location.split(",") : [location],
-          url: fullURL,
-          tags,
-          source: "JSRemotely",
-          postedDate: postedAt,
-          scrapedDate: new Date(), // Set the scraped date to the current date
-        });
-      }
-    });
+    );
 
     console.log(`Scraped ${jobs.length} jobs from JSRemotely`);
     return jobs;
@@ -434,56 +440,62 @@ export async function scrapeReactJobsBoard(): Promise<ScrapedJob[]> {
     const jobs: ScrapedJob[] = [];
 
     // ReactJobsBoard typically has a structure of job cards
-    $(".job-card, .job-item, article").each((_, element) => {
-      const title = $(element).find(".job-title, h2, h3").first().text().trim();
-      const company = $(element)
-        .find(".company-name, .company")
-        .first()
-        .text()
-        .trim();
-      const location = $(element).find(".location").text().trim() || "Remote";
+    $(".job-card, .job-item, article").each(
+      (_: number, element: BasicAcceptedElems<any>) => {
+        const title = $(element)
+          .find(".job-title, h2, h3")
+          .first()
+          .text()
+          .trim();
+        const company = $(element)
+          .find(".company-name, .company")
+          .first()
+          .text()
+          .trim();
+        const location = $(element).find(".location").text().trim() || "Remote";
 
-      // Get job URL
-      let jobURL = $(element).find("a").attr("href");
-      // Ensure the URL is absolute
-      if (jobURL && !jobURL.startsWith("http")) {
-        jobURL = `https://reactjobsboard.com${jobURL}`;
-      }
+        // Get job URL
+        let jobURL = $(element).find("a").attr("href");
+        // Ensure the URL is absolute
+        if (jobURL && !jobURL.startsWith("http")) {
+          jobURL = `https://reactjobsboard.com${jobURL}`;
+        }
 
-      // Extract tags
-      const tags: string[] = [];
-      $(element)
-        .find(".tag, .skill, .technology")
-        .each((_, tagEl) => {
-          const tag = $(tagEl).text().trim();
-          if (tag) tags.push(tag);
-        });
+        // Extract tags
+        const tags: string[] = [];
+        $(element)
+          .find(".tag, .skill, .technology")
+          .each((_: number, tagEl: BasicAcceptedElems<any>) => {
+            const tag = $(tagEl).text().trim();
+            if (tag) tags.push(tag);
+          });
 
-      // Extract posted date if available
-      const dateText = $(element).find(".date, .posted").text().trim();
-      let postedAt: Date | undefined = undefined;
+        // Extract posted date if available
+        const dateText = $(element).find(".date, .posted").text().trim();
+        let postedAt: Date | undefined = undefined;
 
-      if (dateText) {
-        try {
-          postedAt = new Date(dateText);
-        } catch (e) {
-          // Invalid date format
+        if (dateText) {
+          try {
+            postedAt = new Date(dateText);
+          } catch (e) {
+            // Invalid date format
+          }
+        }
+
+        if (title && company && jobURL) {
+          jobs.push({
+            title,
+            company,
+            location: location.includes(",") ? location.split(",") : [location],
+            url: jobURL,
+            tags,
+            source: "ReactJobsBoard",
+            postedDate: postedAt,
+            scrapedDate: new Date(), // Set the scraped date to the current date
+          });
         }
       }
-
-      if (title && company && jobURL) {
-        jobs.push({
-          title,
-          company,
-          location: location.includes(",") ? location.split(",") : [location],
-          url: jobURL,
-          tags,
-          source: "ReactJobsBoard",
-          postedDate: postedAt,
-          scrapedDate: new Date(), // Set the scraped date to the current date
-        });
-      }
-    });
+    );
 
     console.log(`Scraped ${jobs.length} jobs from ReactJobsBoard`);
     return jobs;
@@ -505,55 +517,57 @@ export async function scrapeNoDesk(): Promise<ScrapedJob[]> {
     const jobs: ScrapedJob[] = [];
 
     // NoDesk typically displays jobs in a list
-    $(".job-listing, .job-item, article").each((_, element) => {
-      const titleElement = $(element).find(".job-title, h2, h3").first();
-      const title = titleElement.text().trim();
-      const company = $(element)
-        .find(".company-name, .company")
-        .first()
-        .text()
-        .trim();
-      const location =
-        $(element).find(".location, .job-location").text().trim() || "Remote";
+    $(".job-listing, .job-item, article").each(
+      (_: number, element: BasicAcceptedElems<any>) => {
+        const titleElement = $(element).find(".job-title, h2, h3").first();
+        const title = titleElement.text().trim();
+        const company = $(element)
+          .find(".company-name, .company")
+          .first()
+          .text()
+          .trim();
+        const location =
+          $(element).find(".location, .job-location").text().trim() || "Remote";
 
-      // Get job URL
-      const jobURL =
-        titleElement.find("a").attr("href") ||
-        $(element).find("a").attr("href");
+        // Get job URL
+        const jobURL =
+          titleElement.find("a").attr("href") ||
+          $(element).find("a").attr("href");
 
-      // Some job boards might have tags or categories
-      const tags: string[] = [];
-      $(element)
-        .find(".tags span, .categories span, .skills span")
-        .each((_, tagEl) => {
-          tags.push($(tagEl).text().trim());
-        });
+        // Some job boards might have tags or categories
+        const tags: string[] = [];
+        $(element)
+          .find(".tags span, .categories span, .skills span")
+          .each((_: number, tagEl: BasicAcceptedElems<any>) => {
+            tags.push($(tagEl).text().trim());
+          });
 
-      // Try to extract posting date
-      const dateText = $(element).find(".date, .posted-date").text().trim();
-      let postedAt: Date | undefined = undefined;
+        // Try to extract posting date
+        const dateText = $(element).find(".date, .posted-date").text().trim();
+        let postedAt: Date | undefined = undefined;
 
-      if (dateText) {
-        try {
-          postedAt = new Date(dateText);
-        } catch (e) {
-          // Invalid date format
+        if (dateText) {
+          try {
+            postedAt = new Date(dateText);
+          } catch (e) {
+            // Invalid date format
+          }
+        }
+
+        if (title && company && jobURL) {
+          jobs.push({
+            title,
+            company,
+            location: location.includes(",") ? location.split(",") : [location],
+            url: jobURL,
+            tags,
+            source: "NoDesk",
+            postedDate: postedAt,
+            scrapedDate: new Date(), // Set the scraped date to the current date
+          });
         }
       }
-
-      if (title && company && jobURL) {
-        jobs.push({
-          title,
-          company,
-          location: location.includes(",") ? location.split(",") : [location],
-          url: jobURL,
-          tags,
-          source: "NoDesk",
-          postedDate: postedAt,
-          scrapedDate: new Date(), // Set the scraped date to the current date
-        });
-      }
-    });
+    );
 
     console.log(`Scraped ${jobs.length} jobs from NoDesk`);
     return jobs;
