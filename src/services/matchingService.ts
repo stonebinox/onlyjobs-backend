@@ -118,3 +118,14 @@ export const markMatchAsClicked = async (matchId: string) => {
 
   return true;
 };
+
+export const skipMatch = async (matchId: string) => {
+  const match = await MatchRecord.findById(matchId);
+
+  if (!match) throw new Error("Match not found");
+
+  match.skipped = true;
+  await match.save();
+
+  return true;
+};

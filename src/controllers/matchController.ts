@@ -5,6 +5,7 @@ import MatchRecord from "../models/MatchRecord";
 import {
   getMatchesData,
   markMatchAsClicked,
+  skipMatch,
 } from "../services/matchingService";
 
 // @desc    Get user's job matches
@@ -60,5 +61,20 @@ export const markMatchClick = expressAsyncHandler(
     await markMatchAsClicked(matchId);
 
     res.json({ message: "Match marked as clicked" });
+  }
+);
+
+export const markMatchAsSkipped = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { matchId } = req.body;
+
+    if (!matchId) {
+      res.status(400);
+      throw new Error("Match ID is required");
+    }
+
+    await skipMatch(matchId);
+
+    res.json({ message: "Match marked as skipped" });
   }
 );
