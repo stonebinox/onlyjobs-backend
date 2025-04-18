@@ -72,6 +72,31 @@ export async function runDailyJobScraping(): Promise<void> {
         scraper: scrapeWeWorkRemotely,
       },
       {
+        name: "WeWorkRemotely - Customer Support",
+        url: "https://weworkremotely.com/categories/remote-customer-support-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Management and Finance",
+        url: "https://weworkremotely.com/categories/remote-management-and-finance-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Sales and Marketing",
+        url: "https://weworkremotely.com/categories/remote-sales-and-marketing-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Other",
+        url: "https://weworkremotely.com/categories/all-other-remote-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
+        name: "WeWorkRemotely - Product",
+        url: "https://weworkremotely.com/categories/remote-product-jobs",
+        scraper: scrapeWeWorkRemotely,
+      },
+      {
         name: "RemoteOK",
         url: "https://remoteok.com/remote-dev-jobs",
         scraper: scrapeRemoteOK,
