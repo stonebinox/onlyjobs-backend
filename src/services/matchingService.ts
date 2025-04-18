@@ -81,8 +81,14 @@ Evaluate this match.`,
   };
 };
 
-export const getMatchesData = async (userId: string) => {
-  const matches = await MatchRecord.find({ userId });
+export const getMatchesData = async (
+  userId: string,
+  minMatchScore: number = 0
+) => {
+  const matches = await MatchRecord.find({
+    userId,
+    matchScore: { $gte: minMatchScore },
+  });
 
   const matchPromises = matches.map(async (match) => {
     const job = await JobListing.findById(match.jobId);

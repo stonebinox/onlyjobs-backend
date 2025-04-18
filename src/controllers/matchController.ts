@@ -13,7 +13,16 @@ import {
 export const getMatches = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user._id;
-    const matches = await getMatchesData(userId);
+    const { minMatchScore } = req.query;
+    let minScore = 0;
+
+    if (!minMatchScore) {
+      minScore = 0;
+    } else {
+      minScore = parseInt(minMatchScore as string, 10);
+    }
+
+    const matches = await getMatchesData(userId, minScore);
 
     res.json(matches);
   }
