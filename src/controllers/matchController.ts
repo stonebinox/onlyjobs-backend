@@ -1,7 +1,11 @@
 import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
+
 import MatchRecord from "../models/MatchRecord";
-import { getMatchesData } from "../services/matchingService";
+import {
+  getMatchesData,
+  markMatchAsClicked,
+} from "../services/matchingService";
 
 // @desc    Get user's job matches
 // @route   GET /api/matches/
@@ -29,5 +33,23 @@ export const getMatchCount = expressAsyncHandler(
     }
 
     res.json({ matchCount });
+  }
+);
+
+// @desc    Mark a match as clicked
+// @route   POST /api/matches/click
+// @access  Private
+export const markMatchClick = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { matchId } = req.body;
+
+    if (!matchId) {
+      res.status(400);
+      throw new Error("Match ID is required");
+    }
+
+    await markMatchAsClicked(matchId);
+
+    res.json({ message: "Match marked as clicked" });
   }
 );

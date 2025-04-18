@@ -101,3 +101,14 @@ export const getMatchesData = async (userId: string) => {
 
   return sortedMatches;
 };
+
+export const markMatchAsClicked = async (matchId: string) => {
+  const match = await MatchRecord.findById(matchId);
+
+  if (!match) throw new Error("Match not found");
+
+  match.clicked = true;
+  await match.save();
+
+  return true;
+};
