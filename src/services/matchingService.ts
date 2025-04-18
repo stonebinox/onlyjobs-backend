@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 
 import { IUser } from "../models/User";
-import { IJobListing } from "../models/JobListing";
-import { Freshness } from "../models/MatchRecord";
+import JobListing, { IJobListing } from "../models/JobListing";
+import MatchRecord, { Freshness } from "../models/MatchRecord";
 import { jobMatcherPrompt } from "../utils/jobMatcherPrompt";
 
 interface MatchResult {
@@ -79,4 +79,25 @@ Evaluate this match.`,
     reasoning: parsed.reasoning,
     freshness: calculateJobFreshness(job),
   };
+};
+
+export const getMatchesData = async (userId: string) => {
+  const matches = await MatchRecord.find({ userId });
+
+  const matchPromises = matches.map(async (match) => {
+    const job = await JobListing.findById(match.jobId);
+    const populatedMatch = {
+      ...match.toObject(),
+      job,
+    };
+
+    return populatedMatch;
+  });
+
+  const populatedMatches = await Promise.all(matchPromises);
+  const sortedMatches = populatedMatches.sort(
+    (a, b) => b.matchScore - a.matchScore
+  );
+
+  return sortedMatches;
 };

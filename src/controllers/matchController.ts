@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
 import MatchRecord from "../models/MatchRecord";
+import { getMatchesData } from "../services/matchingService";
 
 // @desc    Get user's job matches
 // @route   GET /api/matches/
@@ -8,19 +9,15 @@ import MatchRecord from "../models/MatchRecord";
 export const getMatches = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user._id;
-
-    // Fetch matches from the database (this is a placeholder, replace with actual DB call)
-    const matches = await MatchRecord.find({ userId });
-
-    if (!matches) {
-      res.status(404);
-      throw new Error("No matches found");
-    }
+    const matches = await getMatchesData(userId);
 
     res.json(matches);
   }
 );
 
+// @desc    Get user's match count
+// @route   GET /api/matches/count
+// @access  Private
 export const getMatchCount = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user._id;
