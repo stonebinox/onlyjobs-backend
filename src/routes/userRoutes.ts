@@ -8,8 +8,8 @@ import {
   skipJob,
 } from "../controllers/userController";
 
-import upload from "../middlewares/fileUpload";
 import { protect } from "../middleware/authMiddleware";
+import upload from "../middleware/fileUpload";
 
 const router = express.Router();
 
