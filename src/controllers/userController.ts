@@ -10,6 +10,7 @@ import {
   findUserByEmail,
   getAIQuestion,
   getUserNameById,
+  getUserQnA,
   parseAudioAnswer,
   parseUserCV,
 } from "../services/userService";
@@ -197,6 +198,9 @@ export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+// @desc    Set user's answer to a question
+// @route   POST /api/users/answer
+// @access  Private
 export const setUserAnswer = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -239,6 +243,9 @@ export const setUserAnswer = asyncHandler(
   }
 );
 
+// @desc    Set user's audio answer to a question
+// @route   POST /api/users/answer-audio
+// @access  Private
 export const setAudioAnswer = asyncHandler(
   async (req: Request, res: Response) => {
     if (!req.file) {
@@ -299,6 +306,26 @@ export const setAudioAnswer = asyncHandler(
       res.status(500);
       throw new Error("Error parsing audio answer");
     }
+  }
+);
+
+// @desc    Get answered questions
+// @route   GET /api/users/answered-questions
+// @access  Private
+export const getAnsweredQuestions = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const answeredQuestions = await getUserQnA(user);
+
+    res.status(200).json({
+      answeredQuestions,
+    });
   }
 );
 

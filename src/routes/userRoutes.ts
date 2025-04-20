@@ -9,6 +9,7 @@ import {
   getQuestion,
   setUserAnswer,
   setAudioAnswer,
+  getAnsweredQuestions,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -33,6 +34,7 @@ router.post(
   audioUpload.single("file"),
   setAudioAnswer
 );
+router.get("/answers", protect, getAnsweredQuestions);
 
 // Unused routes
 router.post("/skip/:jobId", protect, skipJob);

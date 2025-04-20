@@ -12,6 +12,7 @@ import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { getAnswersInstructions } from "../utils/getAnswersInstructions";
 import { questions } from "../utils/questions";
 import { Readable } from "stream";
+import { Question } from "../types/Question";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -195,4 +196,22 @@ export const parseAudioAnswer = async (audioBuffer: ReadStream) => {
     console.error("Error parsing audio answer:", e);
     return null;
   }
+};
+
+export const getUserQnA = async (user: IUser) => {
+  const answers = user.qna || [];
+  const answeredQuestions: (Question & Omit<AnsweredQuestion, "questionId">)[] =
+    answers.map((item) => {
+      const question = questions.find(
+        (q) => q.id === item.questionId
+      ) as Question;
+
+      return {
+        ...question,
+        answer: item.answer,
+        mode: item.mode,
+      };
+    });
+
+  return answeredQuestions;
 };
