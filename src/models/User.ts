@@ -62,6 +62,7 @@ const UserSchema: Schema = new Schema(
         questionId: { type: String, required: true },
         answer: { type: String, required: true },
         mode: { type: String, enum: ["text", "voice"], default: "text" },
+        skipped: { type: Boolean, default: false },
       },
     ],
   },

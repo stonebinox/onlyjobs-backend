@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcrypt";
-import path, { parse } from "path";
+import path from "path";
 import fs from "fs";
+import { tmpdir } from "os";
+import { v4 as uuidv4 } from "uuid";
 
 import User from "../models/User";
 import {
@@ -13,11 +15,9 @@ import {
   getUserQnA,
   parseAudioAnswer,
   parseUserCV,
+  skipQuestion,
 } from "../services/userService";
 import { generateToken } from "../utils/generateToken";
-import { Readable } from "stream";
-import { tmpdir } from "os";
-import { v4 as uuidv4 } from "uuid";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 
 const saltRounds = 10;
@@ -326,6 +326,37 @@ export const getAnsweredQuestions = asyncHandler(
     res.status(200).json({
       answeredQuestions,
     });
+  }
+);
+
+export const setSkippedQuestion = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { questionId } = req.body;
+
+    if (!questionId || questionId.trim() === "") {
+      res.status(400);
+      throw new Error("Please provide a valid question ID");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    try {
+      await skipQuestion(user, questionId);
+      res.status(200).json({
+        success: true,
+        message: "Question skipped successfully",
+      });
+    } catch (e) {
+      console.error("Error skipping question:", e);
+      res.status(500);
+      throw new Error("Error skipping question");
+    }
   }
 );
 

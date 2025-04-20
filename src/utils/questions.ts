@@ -139,7 +139,7 @@ export const questions: Question[] = [
   {
     id: "largest-audience",
     question:
-      "### What's the largest consumer audience a product you've developed has served?",
+      "What's the largest consumer audience a product you've developed has served?",
     category: "general",
   },
   {

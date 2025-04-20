@@ -10,6 +10,7 @@ import {
   setUserAnswer,
   setAudioAnswer,
   getAnsweredQuestions,
+  setSkippedQuestion,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -35,6 +36,7 @@ router.post(
   setAudioAnswer
 );
 router.get("/answers", protect, getAnsweredQuestions);
+router.post("/skip-question", protect, setSkippedQuestion);
 
 // Unused routes
 router.post("/skip/:jobId", protect, skipJob);

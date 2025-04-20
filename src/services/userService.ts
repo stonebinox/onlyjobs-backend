@@ -88,6 +88,7 @@ export const parseUserCV = async (uploadedFilePath: string) => {
 
 export const getAIQuestion = async (user: IUser) => {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const answers = user.qna || [];
   const partialUserData = user.toObject();
   delete partialUserData._id;
   delete partialUserData.__v;
@@ -95,13 +96,17 @@ export const getAIQuestion = async (user: IUser) => {
   delete partialUserData.createdAt;
   delete partialUserData.updatedAt;
   delete partialUserData.isVerified;
+  delete partialUserData.qna;
 
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
       messages: [
-        { role: "system", content: getQuestionsInstructions(partialUserData) },
+        {
+          role: "system",
+          content: getQuestionsInstructions(partialUserData, answers),
+        },
       ],
     });
 
@@ -226,4 +231,29 @@ export const getUserQnA = async (user: IUser) => {
     });
 
   return answeredQuestions;
+};
+
+export const skipQuestion = async (user: IUser, questionId: string) => {
+  const answers = user.qna || [];
+
+  const existingIndex = answers.findIndex(
+    (answer) => answer.questionId === questionId
+  );
+
+  if (existingIndex >= 0) {
+    // we don't do anything if the question is already answered
+    return true;
+  }
+
+  const skippedQuestion = {
+    questionId,
+    answer: "",
+    mode: "text",
+    skipped: true,
+  };
+
+  const finalAnswers = [...answers, skippedQuestion];
+  await User.findByIdAndUpdate(user._id, { qna: finalAnswers });
+
+  return true;
 };
