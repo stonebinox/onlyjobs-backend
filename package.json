@@ -28,7 +28,8 @@
     "node-cron": "^3.0.3",
     "openai": "^4.93.0",
     "pdf-parse": "^1.1.1",
-    "puppeteer": "^24.6.1"
+    "puppeteer": "^24.6.1",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import fs from "fs";
+import fs, { ReadStream } from "fs";
 import { promisify } from "util";
 import path from "path";
 import pdfParse from "pdf-parse";
@@ -11,6 +11,7 @@ import { getQuestionsInstructions } from "../utils/getQuestionsInstructions";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { getAnswersInstructions } from "../utils/getAnswersInstructions";
 import { questions } from "../utils/questions";
+import { Readable } from "stream";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -170,6 +171,28 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
     return true;
   } catch (e) {
     console.error("Error answering question:", e);
+    return null;
+  }
+};
+
+export const parseAudioAnswer = async (audioBuffer: ReadStream) => {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  try {
+    const response = await openai.audio.transcriptions.create({
+      file: audioBuffer,
+      model: "whisper-1",
+      response_format: "text",
+    });
+
+    if (!response) {
+      console.error("Empty response from OpenAI");
+      return null;
+    }
+
+    return response;
+  } catch (e) {
+    console.error("Error parsing audio answer:", e);
     return null;
   }
 };

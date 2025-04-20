@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcrypt";
-import path from "path";
+import path, { parse } from "path";
 import fs from "fs";
 
 import User from "../models/User";
@@ -10,9 +10,14 @@ import {
   findUserByEmail,
   getAIQuestion,
   getUserNameById,
+  parseAudioAnswer,
   parseUserCV,
 } from "../services/userService";
 import { generateToken } from "../utils/generateToken";
+import { Readable } from "stream";
+import { tmpdir } from "os";
+import { v4 as uuidv4 } from "uuid";
+import { AnsweredQuestion } from "../types/AnsweredQuestion";
 
 const saltRounds = 10;
 
@@ -231,6 +236,69 @@ export const setUserAnswer = asyncHandler(
       success: true,
       message: "Answer saved successfully",
     });
+  }
+);
+
+export const setAudioAnswer = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.file) {
+      res.status(400);
+      throw new Error("No audio captured");
+    }
+
+    const { questionId } = req.body;
+    if (!questionId || questionId.trim() === "") {
+      res.status(400);
+      throw new Error("Please provide a valid question ID");
+    }
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const file = req.file;
+    const tempFilename = path.join(tmpdir(), `${uuidv4()}.webm`);
+    fs.writeFileSync(tempFilename, file.buffer);
+    const stream = fs.createReadStream(tempFilename);
+
+    try {
+      const transcript = await parseAudioAnswer(stream);
+      fs.unlinkSync(tempFilename);
+
+      if (!transcript) {
+        res.status(500);
+        throw new Error("Error parsing audio answer");
+      }
+
+      const parsedAnswer: AnsweredQuestion = {
+        questionId,
+        answer: transcript,
+        mode: "voice",
+      };
+      const response = await answerQuestion(user, parsedAnswer);
+
+      if (!response) {
+        res.status(200).json({
+          success: false,
+          message: "Invalid answer",
+        });
+
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Answer saved successfully",
+      });
+    } catch (error) {
+      console.error("Error parsing audio answer:", error);
+      res.status(500);
+      throw new Error("Error parsing audio answer");
+    }
   }
 );
 

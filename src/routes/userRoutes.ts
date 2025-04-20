@@ -8,10 +8,12 @@ import {
   skipJob,
   getQuestion,
   setUserAnswer,
+  setAudioAnswer,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
 import upload from "../middleware/fileUpload";
+import audioUpload from "../middleware/audioUpload";
 
 const router = express.Router();
 
@@ -23,8 +25,16 @@ router.get("/username", protect, getUserName);
 router.get("/active-count", protect, getActiveUserCount);
 router.put("/profile", protect, updateUserProfile);
 router.post("/cv", protect, upload.single("file"), updateUserCV);
-router.post("/skip/:jobId", protect, skipJob);
 router.get("/question", protect, getQuestion);
 router.post("/answer", protect, setUserAnswer);
+router.post(
+  "/answer-audio",
+  protect,
+  audioUpload.single("file"),
+  setAudioAnswer
+);
+
+// Unused routes
+router.post("/skip/:jobId", protect, skipJob);
 
 export default router;
