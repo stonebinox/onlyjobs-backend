@@ -160,11 +160,23 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
     const finalAnswers = [...answers];
 
     parsedResponses.forEach((item: any) => {
-      finalAnswers.push({
-        questionId: item.questionId,
-        answer: item.rephrasedAnswer,
-        mode: answer.mode,
-      });
+      const existingIndex = finalAnswers.findIndex(
+        (answer) => answer.questionId === item.questionId
+      );
+
+      if (existingIndex >= 0) {
+        finalAnswers[existingIndex] = {
+          questionId: item.questionId,
+          answer: item.rephrasedAnswer,
+          mode: answer.mode,
+        };
+      } else {
+        finalAnswers.push({
+          questionId: item.questionId,
+          answer: item.rephrasedAnswer,
+          mode: answer.mode,
+        });
+      }
     });
 
     await User.findByIdAndUpdate(user._id, { qna: finalAnswers });
