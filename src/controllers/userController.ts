@@ -7,6 +7,7 @@ import fs from "fs";
 import User from "../models/User";
 import {
   findUserByEmail,
+  getAIQuestion,
   getUserNameById,
   parseUserCV,
 } from "../services/userService";
@@ -169,6 +170,26 @@ export const updateUserCV = asyncHandler(
     }
   }
 );
+
+// @desc    Get AI-generated question for user
+// @route   GET /api/users/question
+// @access  Private
+export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  const question = await getAIQuestion(user);
+
+  res.status(200).json({
+    question,
+  });
+});
 
 // @desc    Update user profile
 // @route   PUT /api/users/profile

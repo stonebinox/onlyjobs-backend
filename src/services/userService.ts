@@ -5,8 +5,9 @@ import path from "path";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 
-import User from "../models/User";
+import User, { IUser } from "../models/User";
 import { cvParserInstructions } from "../utils/cvParserInstructions";
+import { getQuestionsInstructions } from "../utils/getQuestionsInstructions";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -76,6 +77,36 @@ export const parseUserCV = async (uploadedFilePath: string) => {
     return parsed;
   } catch (e) {
     console.error("Error parsing CV:", e);
+    return null;
+  }
+};
+
+export const getAIQuestion = async (user: IUser) => {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const partialUserData = user.toObject();
+  delete partialUserData._id;
+  delete partialUserData.__v;
+  delete partialUserData.password;
+  delete partialUserData.createdAt;
+  delete partialUserData.updatedAt;
+  delete partialUserData.isVerified;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        { role: "system", content: getQuestionsInstructions(partialUserData) },
+      ],
+    });
+
+    const question = response.choices?.[0]?.message?.content;
+
+    if (!question) throw new Error("Empty response from OpenAI");
+
+    return question;
+  } catch (e) {
+    console.error("Error generating AI question:", e);
     return null;
   }
 };
