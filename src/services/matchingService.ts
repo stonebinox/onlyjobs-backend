@@ -4,6 +4,7 @@ import { IUser } from "../models/User";
 import JobListing, { IJobListing } from "../models/JobListing";
 import MatchRecord, { Freshness } from "../models/MatchRecord";
 import { jobMatcherPrompt } from "../utils/jobMatcherPrompt";
+import { getUserQnA } from "./userService";
 
 interface MatchResult {
   matchScore: number;
@@ -30,11 +31,16 @@ export const matchUserToJob = async (
   job: IJobListing
 ): Promise<MatchResult> => {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const answeredQuestions = await getUserQnA(user);
 
   const userInfo = {
     name: user.name,
     resume: user.resume,
     preferences: user.preferences,
+    questionsAndAnswers: answeredQuestions.map((item) => ({
+      question: item.question,
+      answer: item.answer,
+    })),
   };
 
   const jobInfo = {
