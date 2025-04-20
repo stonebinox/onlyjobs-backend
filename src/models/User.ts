@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from "mongoose";
+import { AnsweredQuestion } from "../types/AnsweredQuestion";
 
 export interface IUser extends Document {
   name: string;
@@ -27,6 +28,7 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
   isVerified: boolean; // New field for email verification status
+  qna: AnsweredQuestion[];
 }
 
 const UserSchema: Schema = new Schema(
@@ -54,7 +56,14 @@ const UserSchema: Schema = new Schema(
       industries: [String],
     },
     skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
-    isVerified: { type: Boolean, default: false }, // New field for email verification status
+    isVerified: { type: Boolean, default: false },
+    qna: [
+      {
+        questionId: { type: String, required: true },
+        answer: { type: String, required: true },
+        mode: { type: String, enum: ["text", "voice"], default: "text" },
+      },
+    ],
   },
   { timestamps: true }
 );

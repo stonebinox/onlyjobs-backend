@@ -6,6 +6,7 @@ import fs from "fs";
 
 import User from "../models/User";
 import {
+  answerQuestion,
   findUserByEmail,
   getAIQuestion,
   getUserNameById,
@@ -190,6 +191,48 @@ export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
     question,
   });
 });
+
+export const setUserAnswer = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { answer } = req.body;
+
+    if (
+      !answer ||
+      answer.answer.trim() === "" ||
+      !answer.questionId ||
+      answer.questionId.trim() === "" ||
+      !answer.mode ||
+      (answer.mode !== "text" && answer.mode !== "voice")
+    ) {
+      res.status(400);
+      throw new Error("Please provide a valid answer");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const response = await answerQuestion(user, answer);
+
+    if (!response) {
+      res.status(200).json({
+        success: false,
+        message: "Invalid answer",
+      });
+
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Answer saved successfully",
+    });
+  }
+);
 
 // @desc    Update user profile
 // @route   PUT /api/users/profile

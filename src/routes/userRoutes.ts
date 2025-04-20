@@ -7,6 +7,7 @@ import {
   updateUserProfile,
   skipJob,
   getQuestion,
+  setUserAnswer,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -24,5 +25,6 @@ router.put("/profile", protect, updateUserProfile);
 router.post("/cv", protect, upload.single("file"), updateUserCV);
 router.post("/skip/:jobId", protect, skipJob);
 router.get("/question", protect, getQuestion);
+router.post("/answer", protect, setUserAnswer);
 
 export default router;

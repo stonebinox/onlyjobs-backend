@@ -8,6 +8,9 @@ import mammoth from "mammoth";
 import User, { IUser } from "../models/User";
 import { cvParserInstructions } from "../utils/cvParserInstructions";
 import { getQuestionsInstructions } from "../utils/getQuestionsInstructions";
+import { AnsweredQuestion } from "../types/AnsweredQuestion";
+import { getAnswersInstructions } from "../utils/getAnswersInstructions";
+import { questions } from "../utils/questions";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -107,6 +110,66 @@ export const getAIQuestion = async (user: IUser) => {
     return question;
   } catch (e) {
     console.error("Error generating AI question:", e);
+    return null;
+  }
+};
+
+export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
+  const answers = user.qna || [];
+  const partialUserData = user.toObject();
+  delete partialUserData._id;
+  delete partialUserData.__v;
+  delete partialUserData.password;
+  delete partialUserData.createdAt;
+  delete partialUserData.updatedAt;
+  delete partialUserData.isVerified;
+  delete partialUserData.qna;
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const aiContent = getAnswersInstructions(
+    answer,
+    questions,
+    answers,
+    partialUserData
+  );
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: aiContent,
+        },
+      ],
+    });
+
+    const result = response.choices?.[0]?.message?.content;
+
+    if (!result) throw new Error("Empty response from OpenAI");
+
+    const parsedResponses = JSON.parse(result);
+
+    if (parsedResponses.length === 0) {
+      console.error("No responses found in parsed output");
+      return false;
+    }
+
+    const finalAnswers = [...answers];
+
+    parsedResponses.forEach((item: any) => {
+      finalAnswers.push({
+        questionId: item.questionId,
+        answer: item.rephrasedAnswer,
+        mode: answer.mode,
+      });
+    });
+
+    await User.findByIdAndUpdate(user._id, { qna: finalAnswers });
+
+    return true;
+  } catch (e) {
+    console.error("Error answering question:", e);
     return null;
   }
 };

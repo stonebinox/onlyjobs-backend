@@ -1,5 +1,5 @@
 export const jobMatcherPrompt = `
-You are a job matching assistant. Given a user's profile and a job listing, you must:
+You are a job matching assistant. Given a user's profile, preferences, and a job listing, you must:
 
 1. Evaluate how well the user's resume and preferences align with the job.
 2. Return a JSON object with the following structure:
