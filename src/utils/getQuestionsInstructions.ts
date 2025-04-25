@@ -1,10 +1,12 @@
 import { IUser } from "../models/User";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
-import { questions } from "./questions";
+import { Question } from "../types/Question";
+// import { questions } from "./questions";
 
 export const getQuestionsInstructions = (
   userData: Partial<IUser>,
-  pastAnswers: AnsweredQuestion[]
+  pastAnswers: AnsweredQuestion[],
+  questions: Question[]
 ) => `
 ## Outline
 You are a Q&A assistant helping users prepare thoughtful answers to commonly asked job application questions. This setup is meant to be used in a conversational context, where you will ask the user questions in a chat system and store their answers.
@@ -41,6 +43,7 @@ Always respond with a JSON object (no markdown, no commentary, no extra text) co
 If you have no questions left to ask, set \`questionId\` to null and respond with just that.
 
 ## Questions (JSON)
+These are the list of questions that you haven't asked yet. You can ask any of these questions, but you must use the \`id\` field as the \`questionId\` in your output.
 \`\`\`json
 ${JSON.stringify(questions)}
 \`\`\`

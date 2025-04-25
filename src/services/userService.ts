@@ -99,13 +99,25 @@ export const getAIQuestion = async (user: IUser) => {
   delete partialUserData.qna;
 
   try {
+    const pendingQuestions = questions.filter((question: Question) => {
+      const existingIndex = answers.findIndex(
+        (answer) => answer.questionId === question.id
+      );
+
+      return existingIndex < 0;
+    });
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
       messages: [
         {
           role: "system",
-          content: getQuestionsInstructions(partialUserData, answers),
+          content: getQuestionsInstructions(
+            partialUserData,
+            answers,
+            pendingQuestions
+          ),
         },
       ],
     });
