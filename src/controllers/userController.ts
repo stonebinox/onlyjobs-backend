@@ -11,6 +11,7 @@ import {
   answerQuestion,
   findUserByEmail,
   getAIQuestion,
+  getAnswerForQuestion,
   getUserNameById,
   getUserQnA,
   parseAudioAnswer,
@@ -356,6 +357,44 @@ export const setSkippedQuestion = asyncHandler(
       console.error("Error skipping question:", e);
       res.status(500);
       throw new Error("Error skipping question");
+    }
+  }
+);
+
+export const createAnswer = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { question } = req.body;
+    if (!question || question.trim() === "") {
+      res.status(400);
+      throw new Error("Please provide a valid question");
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    try {
+      const answer = await getAnswerForQuestion(user, question);
+
+      if (!answer) {
+        res.status(200).json({
+          success: false,
+          message: "Invalid answer",
+        });
+
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        answer,
+      });
+    } catch (e) {
+      console.error("Error creating answer:", e);
+      res.status(500);
+      throw new Error("Error creating answer");
     }
   }
 );

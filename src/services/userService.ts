@@ -13,6 +13,7 @@ import { getAnswersInstructions } from "../utils/getAnswersInstructions";
 import { questions } from "../utils/questions";
 import { Readable } from "stream";
 import { Question } from "../types/Question";
+import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstructions";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -268,4 +269,47 @@ export const skipQuestion = async (user: IUser, questionId: string) => {
   await User.findByIdAndUpdate(user._id, { qna: finalAnswers });
 
   return true;
+};
+
+export const getAnswerForQuestion = async (user: IUser, question: string) => {
+  const answeredQuestions = await getUserQnA(user);
+  const partialUserData = user.toObject();
+  delete partialUserData._id;
+  delete partialUserData.__v;
+  delete partialUserData.password;
+  delete partialUserData.createdAt;
+  delete partialUserData.updatedAt;
+  delete partialUserData.isVerified;
+  delete partialUserData.qna;
+
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: getAnswerComposerInstructions(
+            answeredQuestions,
+            partialUserData
+          ),
+        },
+        {
+          role: "user",
+          content: `Here's a new question:\n\n${question}\n\nPlease generate an answer that matches the tone and style of the user's past answers.`,
+        },
+      ],
+    });
+
+    const result = response.choices?.[0]?.message?.content;
+
+    if (!result) throw new Error("Empty response from OpenAI");
+
+    return result;
+  } catch (e) {
+    console.error("Error generating answer for question:", e);
+    return null;
+  }
 };
