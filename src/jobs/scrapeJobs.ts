@@ -47,11 +47,11 @@ export async function runDailyJobScraping(): Promise<void> {
     );
 
     const sources = [
-      {
-        name: "WellFound",
-        url: "https://wellfound.com/jobs",
-        scraper: scrapeRemotive,
-      },
+      // {
+      //   name: "WellFound",
+      //   url: "https://wellfound.com/jobs",
+      //   scraper: scrapeRemotive,
+      // },
       {
         name: "WeWorkRemotely - Full Stack",
         url: "https://weworkremotely.com/categories/remote-full-stack-programming-jobs",
