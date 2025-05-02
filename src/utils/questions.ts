@@ -197,4 +197,28 @@ export const questions: Question[] = [
     question: "What are some tools or skills you prefer to not work with?",
     category: "general",
   },
+  {
+    id: "spec-writing",
+    question:
+      "In a product team, who do you think should be in charge of defining the product specs? Have you ever had to write your own product or feature specs or plans? If so, how did you feel about the experience?",
+    category: "workstyle",
+  },
+  {
+    id: "startup-best-practices",
+    question:
+      "In your opinion, what software engineering rituals or best practices are critical (if any) for an early-stage startup? And which ones you think are not so important? Please, explain the reasoning.",
+    category: "general",
+  },
+  {
+    id: "ai-tools-usage",
+    question:
+      "Can you explain how you've utilized AI tools like Cursor or Claude to become a better developer?",
+    category: "workstyle",
+  },
+  {
+    id: "sprint-planning",
+    question:
+      "In a typical 2-week sprint, how do you plan, prioritize, and deliver your work? Walk us through your approach from day one to demo.",
+    category: "workstyle",
+  },
 ];
