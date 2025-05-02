@@ -227,4 +227,10 @@ export const questions: Question[] = [
       "Tell us about a time where you shipped something meaningful in <1 week - what did you cut, and what did you learn?",
     category: "project",
   },
+  {
+    id: "recent-technical-achievement",
+    question:
+      "Describe a recent technical solution or achievement that you are proud of. Anything goes, from a tiny one hour ticket to a large system, we are interested in how you think and your ability in technical writing. Please write at least a few sentences explaining the challenge and your solution, each.",
+    category: "project",
+  },
 ];

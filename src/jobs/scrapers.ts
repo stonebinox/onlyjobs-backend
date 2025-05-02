@@ -261,47 +261,149 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
 }
 
 /**
- * Scrapes jobs from Remotive
- * JSON API-based scraper (proxied to avoid Cloudflare 526 error)
+ * Scrapes jobs from Remotive using Puppeteer
+ * doesn't work atm
  */
 export async function scrapeRemotive(): Promise<ScrapedJob[]> {
-  try {
-    const originalUrl =
-      "https://remotive.io/api/remote-jobs?category=software-dev";
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-      originalUrl
-    )}`;
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  const jobs: ScrapedJob[] = [];
 
-    const response = await axios.get(proxyUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; JobBoardScraper/1.0)",
-      },
+  try {
+    // Set user agent to avoid detection
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    );
+
+    // Navigate to Remotive jobs page
+    await page.goto("https://remotive.com/remote-jobs/software-dev", {
+      waitUntil: "networkidle2",
+      timeout: 60000,
     });
 
-    const data = response.data;
+    // Extract job listings
+    const jobLinks = await page.evaluate(() => {
+      const results: {
+        title: string;
+        company: string;
+        location: string;
+        url: string;
+        tags: string[];
+        postedAtText: string;
+      }[] = [];
 
-    if (!data.jobs || !Array.isArray(data.jobs)) {
-      console.error("Unexpected response format from Remotive API");
-      return [];
+      // Select all job listing elements
+      const listings = document.querySelectorAll(".job-tile");
+
+      listings.forEach((el) => {
+        // Extract basic job information
+        const titleEl = el.querySelector(".position, .job-title");
+        const companyEl = el.querySelector(".company, .company-name");
+        const locationEl = el.querySelector(".location, .job-location");
+        const linkEl = el.querySelector("a.job-link, a.position-link");
+
+        if (!titleEl || !companyEl || !linkEl) return;
+
+        const title = titleEl.textContent?.trim() || "";
+        const company = companyEl.textContent?.trim() || "";
+        const location = locationEl?.textContent?.trim() || "Remote";
+        const url = linkEl.getAttribute("href") || "";
+
+        // Extract tags if available
+        const tags: string[] = [];
+        el.querySelectorAll(".tags span, .job-tags .tag").forEach((tagEl) => {
+          const tag = tagEl.textContent?.trim();
+          if (tag) tags.push(tag);
+        });
+
+        // Extract posted date text
+        const postedAtText =
+          el.querySelector(".job-date, .posted-date")?.textContent?.trim() ||
+          "";
+
+        if (title && company && url) {
+          results.push({
+            title,
+            company,
+            location,
+            url: url.startsWith("http") ? url : `https://remotive.com${url}`,
+            tags,
+            postedAtText,
+          });
+        }
+      });
+
+      return results;
+    });
+
+    // Visit each job page to get the full description
+    for (const job of jobLinks) {
+      try {
+        const jobPage = await browser.newPage();
+        await jobPage.goto(job.url, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+
+        // Extract job description
+        const description = await jobPage.evaluate(() => {
+          const descriptionEl = document.querySelector(
+            ".job-description, .description"
+          );
+          return descriptionEl ? descriptionEl.textContent?.trim() || "" : "";
+        });
+
+        // Parse the posted date text into a Date object
+        let postedDate: Date | undefined = undefined;
+        if (job.postedAtText) {
+          // Handle different date formats like "Posted 2 days ago", "Jun 15, 2025", etc.
+          if (
+            job.postedAtText.includes("day") ||
+            job.postedAtText.includes("hour")
+          ) {
+            const daysMatch = job.postedAtText.match(/(\d+)\s*day/);
+            const hoursMatch = job.postedAtText.match(/(\d+)\s*hour/);
+
+            const daysAgo = daysMatch ? parseInt(daysMatch[1], 10) : 0;
+            const hoursAgo = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+
+            postedDate = new Date();
+            postedDate.setDate(postedDate.getDate() - daysAgo);
+            postedDate.setHours(postedDate.getHours() - hoursAgo);
+          } else {
+            try {
+              postedDate = new Date(job.postedAtText);
+            } catch (e) {
+              // Invalid date format, ignore
+            }
+          }
+        }
+
+        jobs.push({
+          title: job.title,
+          company: job.company,
+          location: Array.isArray(job.location) ? job.location : [job.location],
+          description,
+          url: job.url,
+          tags: job.tags,
+          source: "Remotive",
+          postedDate,
+          scrapedDate: new Date(),
+        });
+
+        await jobPage.close();
+      } catch (err) {
+        console.warn("Failed to extract job details from", job.url, err);
+      }
     }
 
-    const jobs: ScrapedJob[] = data.jobs.map((job: any) => ({
-      title: job.title || "Unknown Position",
-      company: job.company_name || "Unknown Company",
-      location: job.candidate_required_location || "Remote",
-      description: job.description,
-      url: job.url || job.absolute_url,
-      tags: job.tags || [],
-      source: "Remotive",
-      postedAt: job.publication_date || undefined,
-      scrapedDate: new Date(),
-    }));
-
-    console.log(`Scraped ${jobs.length} jobs from Remotive`);
+    console.log(`Scraped ${jobs.length} jobs from Remotive with Puppeteer`);
     return jobs;
   } catch (error) {
-    console.error("Error scraping Remotive:", error);
+    console.error("Error scraping Remotive with Puppeteer:", error);
     return [];
+  } finally {
+    await browser.close();
   }
 }
 
