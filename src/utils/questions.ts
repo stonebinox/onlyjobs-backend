@@ -221,4 +221,10 @@ export const questions: Question[] = [
       "In a typical 2-week sprint, how do you plan, prioritize, and deliver your work? Walk us through your approach from day one to demo.",
     category: "workstyle",
   },
+  {
+    id: "rapid-shipping",
+    question:
+      "Tell us about a time where you shipped something meaningful in <1 week - what did you cut, and what did you learn?",
+    category: "project",
+  },
 ];
