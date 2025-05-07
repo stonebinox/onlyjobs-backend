@@ -120,6 +120,7 @@ export const markMatchAsClicked = async (matchId: string) => {
   if (!match) throw new Error("Match not found");
 
   match.clicked = true;
+  match.skipped = false; // Reset skipped status
   await match.save();
 
   return true;
