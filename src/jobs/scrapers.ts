@@ -1,6 +1,6 @@
 import axios from "axios";
 import { BasicAcceptedElems, load } from "cheerio";
-import puppeteer from "puppeteer";
+import puppeteer, { Browser } from "puppeteer";
 
 // Common interface for all scraped jobs
 export interface ScrapedJob {
@@ -611,70 +611,507 @@ export async function scrapeReactJobsBoard(): Promise<ScrapedJob[]> {
  * Scrapes jobs from NoDesk
  * HTML-based scraper
  */
-export async function scrapeNoDesk(): Promise<ScrapedJob[]> {
+export async function scrapeNoDesk(url: string): Promise<ScrapedJob[]> {
   try {
-    const url = "https://nodesk.co/remote-jobs/programming/";
     const response = await axios.get(url);
     const $ = load(response.data);
     const jobs: ScrapedJob[] = [];
 
-    // NoDesk typically displays jobs in a list
-    $(".job-listing, .job-item, article").each(
-      (_: number, element: BasicAcceptedElems<any>) => {
-        const titleElement = $(element).find(".job-title, h2, h3").first();
+    // Find job listings by targeting dt-s dt-ns elements that contain job data
+    console.log("Examining NoDesk HTML structure...");
+
+    // The actual job listings appear to be in li elements inside a ul with class "list"
+    $("ul.list > li.dt-s, li.dt-s.dt-ns").each((_, element) => {
+      try {
+        // Extract job title from h2 elements
+        const titleElement = $(element)
+          .find("h2.f8.f7-ns.fw6.lh-title a, h2 a")
+          .first();
         const title = titleElement.text().trim();
-        const company = $(element)
-          .find(".company-name, .company")
-          .first()
-          .text()
-          .trim();
-        const location =
-          $(element).find(".location, .job-location").text().trim() || "Remote";
 
-        // Get job URL
-        const jobURL =
-          titleElement.find("a").attr("href") ||
-          $(element).find("a").attr("href");
+        // Extract company name
+        const companyElement = $(element)
+          .find("h3.f8.fw4 a, h3.f8.fw4")
+          .first();
+        let company = companyElement.text().trim();
 
-        // Some job boards might have tags or categories
-        const tags: string[] = [];
+        // If company is empty, try alternative selector
+        if (!company) {
+          company = $(element).find("h3").text().trim();
+        }
+
+        // Extract locations
+        const locationItems: string[] = [];
         $(element)
-          .find(".tags span, .categories span, .skills span")
-          .each((_: number, tagEl: BasicAcceptedElems<any>) => {
-            tags.push($(tagEl).text().trim());
+          .find("h5.f9.fw4 a, h5.f9.fw4.grey-700.mv0, h5.f9.fw4.grey-900.mv0")
+          .each((_, locElement) => {
+            const loc = $(locElement).text().trim();
+            if (loc && loc !== "Remote:" && !locationItems.includes(loc)) {
+              locationItems.push(loc);
+            }
           });
 
-        // Try to extract posting date
-        const dateText = $(element).find(".date, .posted-date").text().trim();
-        let postedAt: Date | undefined = undefined;
+        // Extract job URL
+        const jobURL = titleElement.attr("href");
+        const fullJobURL = jobURL?.startsWith("http")
+          ? jobURL
+          : `https://nodesk.co${jobURL}`;
 
-        if (dateText) {
-          try {
-            postedAt = new Date(dateText);
-          } catch (e) {
-            // Invalid date format
+        // Extract job categories/tags
+        const tags: string[] = [];
+        $(element)
+          .find("ul.list.f10 li.dib a, ul.list.f10 li.dib span")
+          .each((_, tagEl) => {
+            const tag = $(tagEl).text().trim();
+            if (tag && !tags.includes(tag)) {
+              tags.push(tag);
+            }
+          });
+
+        // Extract job type (Full-Time, etc.)
+        $(element)
+          .find("h4.f9.fw4.mv0 a")
+          .each((_, jobTypeEl) => {
+            const jobType = $(jobTypeEl).text().trim();
+            if (jobType && !tags.includes(jobType)) {
+              tags.push(jobType);
+            }
+          });
+
+        // Extract salary if available
+        const salaryText = $(element)
+          .find("h4.f9.grey-900.fw4.mv0, h4.f9.grey-700.fw4.mv0")
+          .text()
+          .trim();
+
+        let salary = undefined;
+
+        if (salaryText && salaryText.includes("$")) {
+          // Check for salary ranges like "$7.2K – $24K"
+          const salaryMatch = salaryText.match(
+            /\$(\d+(?:\.\d+)?)K\s*[–-]\s*\$(\d+(?:\.\d+)?)K/
+          );
+          if (salaryMatch) {
+            salary = {
+              min: parseFloat(salaryMatch[1]) * 1000,
+              max: parseFloat(salaryMatch[2]) * 1000,
+              currency: "USD",
+              estimated: true,
+            };
+          } else {
+            // Check for single salary like "$5K"
+            const singleSalaryMatch = salaryText.match(/\$(\d+(?:\.\d+)?)K/);
+            if (singleSalaryMatch) {
+              const amount = parseFloat(singleSalaryMatch[1]) * 1000;
+              salary = {
+                min: amount,
+                max: amount,
+                currency: "USD",
+                estimated: true,
+              };
+            }
           }
         }
 
-        if (title && company && jobURL) {
-          jobs.push({
+        // Extract posted date
+        const dateElement = $(element).find("time");
+        let dateText = dateElement.attr("datetime");
+
+        if (!dateText) {
+          dateText =
+            $(element).find("span.f9 time").text().trim() ||
+            $(element).find(".dtc-ns.f9.grey-700.tr.v-top span").text().trim();
+        }
+
+        let postedDate: Date | undefined = undefined;
+
+        if (dateText) {
+          if (dateText.toLowerCase().includes("today")) {
+            postedDate = new Date();
+          } else if (dateText.includes("d")) {
+            // Handle "1d", "2d" format
+            const daysAgo = parseInt(dateText.replace(/\D/g, ""), 10);
+            if (!isNaN(daysAgo)) {
+              postedDate = new Date();
+              postedDate.setDate(postedDate.getDate() - daysAgo);
+            }
+          } else {
+            try {
+              postedDate = new Date(dateText);
+            } catch (e) {
+              console.log("Could not parse date:", dateText);
+            }
+          }
+        }
+
+        if (title && company && fullJobURL) {
+          // Create basic job information first
+          const job: ScrapedJob = {
             title,
             company,
-            location: location.includes(",") ? location.split(",") : [location],
-            url: jobURL,
+            location: locationItems.length > 0 ? locationItems : ["Remote"],
+            url: fullJobURL,
             tags,
             source: "NoDesk",
-            postedDate: postedAt,
-            scrapedDate: new Date(), // Set the scraped date to the current date
-          });
+            salary,
+            postedDate,
+            scrapedDate: new Date(),
+          };
+
+          // Add to jobs array to be processed for detailed information
+          jobs.push(job);
+          console.log(`Found job: ${title} at ${company}`);
         }
+      } catch (err) {
+        console.error("Error parsing NoDesk job item:", err);
       }
+    });
+
+    if (jobs.length === 0) {
+      console.log(
+        "No jobs found with primary selector, trying alternative selector"
+      );
+
+      // Try another selector pattern based on the featured jobs
+      $("li.dt-s.dt-ns.bt.b--indigo-100, li.dt-s.dt-ns.bt.b--indigo-050").each(
+        (_, element) => {
+          try {
+            const titleElement = $(element).find("h2 a").first();
+            const title = titleElement.text().trim();
+
+            const companyElement = $(element).find("h3").first();
+            const company = companyElement.text().trim();
+
+            // Extract job URL
+            const jobURL = titleElement.attr("href");
+            const fullJobURL = jobURL?.startsWith("http")
+              ? jobURL
+              : `https://nodesk.co${jobURL}`;
+
+            // Extract tags if available (simplified)
+            const tags: string[] = [];
+            $(element)
+              .find("ul.list li.dib a, ul.list li.dib span")
+              .each((_, tagEl) => {
+                const tag = $(tagEl).text().trim();
+                if (tag && !tags.includes(tag)) {
+                  tags.push(tag);
+                }
+              });
+
+            if (title && company && fullJobURL) {
+              // We found a job with minimum required info
+              jobs.push({
+                title,
+                company,
+                location: ["Remote"], // Default
+                url: fullJobURL,
+                tags,
+                source: "NoDesk",
+                scrapedDate: new Date(),
+              });
+
+              console.log(
+                `Found job with alternative selector: ${title} at ${company}`
+              );
+            }
+          } catch (err) {
+            console.error("Error with alternative selector:", err);
+          }
+        }
+      );
+    }
+
+    console.log(
+      `Found ${jobs.length} jobs on NoDesk listing page. Fetching detailed information...`
     );
 
-    console.log(`Scraped ${jobs.length} jobs from NoDesk`);
-    return jobs;
+    // Process each job to get detailed information
+    const detailedJobs: ScrapedJob[] = [];
+
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+
+      try {
+        console.log(
+          `Fetching details for job ${i + 1}/${jobs.length}: ${job.title}`
+        );
+        const jobDetails = await fetchNoDeskJobDetails(job.url);
+
+        // Merge job details with the basic job info
+        const detailedJob: ScrapedJob = {
+          ...job,
+          description: jobDetails.description || "",
+          // Add any additional tags found on the detail page
+          tags: [
+            ...new Set([
+              ...(job.tags || []),
+              ...(jobDetails.additionalTags || []),
+            ]),
+          ],
+          // Update salary if found on detail page and not already set
+          salary: job.salary || jobDetails.salary,
+        };
+
+        // Update the URL to the actual application URL if found
+        if (jobDetails.applicationUrl) {
+          detailedJob.url = jobDetails.applicationUrl;
+        }
+
+        detailedJobs.push(detailedJob);
+
+        // Add a small delay to avoid overwhelming the server
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`Error fetching details for job ${job.title}:`, error);
+        detailedJobs.push(job); // Add the job without details if there's an error
+      }
+    }
+
+    console.log(
+      `Successfully scraped ${detailedJobs.length} jobs from NoDesk with details`
+    );
+
+    return detailedJobs;
   } catch (error) {
     console.error("Error scraping NoDesk:", error);
     return [];
+  }
+}
+
+/**
+ * Fetches detailed job information from the individual job page.
+ */
+async function fetchNoDeskJobDetails(url: string): Promise<{
+  description?: string;
+  additionalTags?: string[];
+  salary?: {
+    min?: number;
+    max?: number;
+    estimated?: boolean;
+    currency?: string;
+  };
+  applicationUrl?: string; // Added to store the real application URL
+}> {
+  try {
+    const response = await axios.get(url);
+    const $ = load(response.data);
+
+    // Extract job description
+    let description = "";
+
+    // Look for the main content section that contains the job description
+    const descriptionElement = $(
+      "section.fr.mb8.mt4.mv0-ns.pl10-ns.w-100.w-two-thirds-ns .grey-800"
+    );
+
+    if (descriptionElement.length) {
+      // Collect all paragraphs and lists in the description
+      descriptionElement.find("p, ul, li, h2").each((_, paragraph) => {
+        const paragraphText = $(paragraph).text().trim();
+        if (paragraphText) {
+          // If it's a heading (h2), make it stand out
+          if (paragraph.tagName === "h2") {
+            description += `\n### ${paragraphText}\n\n`;
+          } else {
+            description += paragraphText + "\n\n";
+          }
+        }
+      });
+    } else {
+      // Alternative approach - look for any content that might be the job description
+      const altDescriptionElement = $(
+        "section.fr p, main p.f8.lh-relaxed, div.grey-800 p, div.grey-800 li"
+      );
+      if (altDescriptionElement.length) {
+        altDescriptionElement.each((_, paragraph) => {
+          const paragraphText = $(paragraph).text().trim();
+          if (
+            paragraphText &&
+            !paragraphText.includes("Please let") &&
+            !paragraphText.includes("NoDesk as a way to support us")
+          ) {
+            description += paragraphText + "\n\n";
+          }
+        });
+      }
+    }
+
+    // Extract additional tags from the job detail page
+    const additionalTags: string[] = [];
+    $(
+      "div.bb.b--indigo-050.pb3.pt4 ul.f9.list.mv0.pl0 li.dib a, div.bb.b--indigo-050.pb3.pt4 ul.f9.list.mv0.pl0 li.dib span"
+    ).each((_, tagEl) => {
+      const tag = $(tagEl).text().trim();
+      if (tag) {
+        additionalTags.push(tag);
+      }
+    });
+
+    // Try to extract salary information from the job detail page if available
+    let salary = undefined;
+
+    // First, try to find salary info in the visible HTML
+    const salaryText = $(
+      "div.bb.b--indigo-050.pv4 .grey-700.mv0.tracked-wide, div.inline-flex.items-center p.grey-700.mv0.tracked-wide"
+    )
+      .text()
+      .trim();
+
+    if (salaryText && salaryText.includes("$")) {
+      // Check for salary ranges like "$7.2K – $24K"
+      const salaryMatch = salaryText.match(
+        /\$(\d+(?:\.\d+)?)K\s*[–-]\s*\$(\d+(?:\.\d+)?)K/
+      );
+      if (salaryMatch) {
+        salary = {
+          min: parseFloat(salaryMatch[1]) * 1000,
+          max: parseFloat(salaryMatch[2]) * 1000,
+          currency: "USD",
+          estimated: true,
+        };
+      } else {
+        // Check for single salary like "$5K"
+        const singleSalaryMatch = salaryText.match(/\$(\d+(?:\.\d+)?)K/);
+        if (singleSalaryMatch) {
+          const amount = parseFloat(singleSalaryMatch[1]) * 1000;
+          salary = {
+            min: amount,
+            max: amount,
+            currency: "USD",
+            estimated: true,
+          };
+        }
+      }
+    }
+
+    // Second attempt: Look for salary information in application/ld+json schema
+    const schemaScripts = $('script[type="application/ld+json"]');
+
+    if (schemaScripts.length && !salary) {
+      for (let i = 0; i < schemaScripts.length; i++) {
+        try {
+          const content = $(schemaScripts[i]).html();
+          if (!content) continue;
+
+          // Clean the content - sometimes there are strange characters or comments
+          const cleanedContent = content
+            .replace(/\\/g, "\\\\") // Handle escaped backslashes
+            .replace(/\\"/g, '\\"') // Handle escaped quotes
+            .replace(/\n/g, " ") // Remove newlines
+            .replace(/\/\*.*?\*\//g, "") // Remove comments
+            .trim();
+
+          const schemaData = JSON.parse(cleanedContent);
+
+          if (schemaData && schemaData["@type"] === "JobPosting") {
+            // Extract salary info
+            if (schemaData.baseSalary) {
+              let minValue, maxValue;
+              let currency = "USD";
+
+              // Handle different salary structures
+              if (schemaData.baseSalary.value) {
+                if (schemaData.baseSalary.value.minValue) {
+                  minValue = schemaData.baseSalary.value.minValue;
+                }
+                if (schemaData.baseSalary.value.maxValue) {
+                  maxValue = schemaData.baseSalary.value.maxValue;
+                }
+                if (schemaData.baseSalary.value.unitText === "YEAR") {
+                  // Values are annual
+                }
+                if (schemaData.baseSalary.currency) {
+                  currency = schemaData.baseSalary.currency;
+                }
+              } else {
+                // Direct values
+                minValue = schemaData.baseSalary.minValue;
+                maxValue = schemaData.baseSalary.maxValue;
+                if (schemaData.baseSalary.currency) {
+                  currency = schemaData.baseSalary.currency;
+                }
+              }
+
+              if (minValue || maxValue) {
+                salary = {
+                  min: minValue || undefined,
+                  max: maxValue || undefined,
+                  currency,
+                  estimated: false, // Coming from schema, so not estimated
+                };
+              }
+            }
+
+            // If no description was found earlier, try to extract from schema
+            if (!description && schemaData.description) {
+              description = schemaData.description;
+            }
+
+            // Break once we've found valid job data
+            break;
+          }
+        } catch (e) {
+          console.error("Error parsing JSON-LD schema:", e);
+        }
+      }
+    }
+
+    // Extract the actual application URL from the "Apply Now" button
+    let applicationUrl: string | undefined = undefined;
+
+    // First try: Look for the Apply Now button in the job details section
+    const applyButton = $(
+      "a.dib.link.f8.fw5.dim.white.bg-indigo-500.br2.pa3.pa4-s.ph6-ns.pv4-ns.shadow-2.tracked-wider.ttu.w-auto, " +
+        "div.pv4 a.dib.link.f9.f8-ns.fw5.dim.white.bg-indigo-500.br2.ph3.ph6-s.ph6-ns.pv2.pv3-s.pv3-ns.shadow-2.tracked-wider.ttu"
+    );
+
+    if (applyButton.length) {
+      applicationUrl = applyButton.attr("href");
+
+      // Check for onclick attribute that contains the URL
+      const onClickAttr = applyButton.attr("onclick");
+      if (!applicationUrl && onClickAttr && onClickAttr.includes("Apply:")) {
+        // Extract URL from onclick if it's embedded there
+        const urlMatch = onClickAttr.match(/href=['"]([^'"]+)['"]/);
+        if (urlMatch) {
+          applicationUrl = urlMatch[1];
+        }
+      }
+    }
+
+    // Second try: Check if there's a job application form or iframe
+    if (!applicationUrl) {
+      const applicationForm = $("form[action*='apply'], iframe[src*='apply']");
+      if (applicationForm.length) {
+        applicationUrl =
+          applicationForm.attr("action") || applicationForm.attr("src");
+      }
+    }
+
+    // If we still don't have the URL, try to find any link with text like "Apply"
+    if (!applicationUrl) {
+      $("a").each((_, element) => {
+        const linkText = $(element).text().toLowerCase();
+        if (
+          (linkText.includes("apply") ||
+            linkText.includes("application") ||
+            linkText.includes("job")) &&
+          !applicationUrl
+        ) {
+          applicationUrl = $(element).attr("href");
+        }
+      });
+    }
+
+    return {
+      description: description.trim(),
+      additionalTags,
+      salary,
+      applicationUrl,
+    };
+  } catch (error) {
+    console.error(`Error fetching job details from ${url}:`, error);
+    return {};
   }
 }

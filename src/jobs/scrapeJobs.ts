@@ -6,7 +6,7 @@ import {
   scrapeWeWorkRemotely,
   scrapeRemoteOK,
   scrapeLandingJobs,
-  scrapeRemotive,
+  scrapeNoDesk,
 } from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
@@ -47,11 +47,51 @@ export async function runDailyJobScraping(): Promise<void> {
     );
 
     const sources = [
-      // {
-      //   name: "WellFound",
-      //   url: "https://wellfound.com/jobs",
-      //   scraper: scrapeRemotive,
-      // },
+      {
+        name: "NoDesk - Customer Support",
+        url: "https://nodesk.co/remote-jobs/customer-support/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Design",
+        url: "https://nodesk.co/remote-jobs/design/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Engineering",
+        url: "https://nodesk.co/remote-jobs/engineering/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Marketing",
+        url: "https://nodesk.co/remote-jobs/marketing/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Non-Tech",
+        url: "https://nodesk.co/remote-jobs/non-tech/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Operations",
+        url: "https://nodesk.co/remote-jobs/operations/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Product",
+        url: "https://nodesk.co/remote-jobs/product/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - Sales",
+        url: "https://nodesk.co/remote-jobs/sales/",
+        scraper: scrapeNoDesk,
+      },
+      {
+        name: "NoDesk - All Other",
+        url: "https://nodesk.co/remote-jobs/",
+        scraper: scrapeNoDesk,
+      },
       {
         name: "WeWorkRemotely - Full Stack",
         url: "https://weworkremotely.com/categories/remote-full-stack-programming-jobs",

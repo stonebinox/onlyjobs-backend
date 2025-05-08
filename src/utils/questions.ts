@@ -233,4 +233,10 @@ export const questions: Question[] = [
       "Describe a recent technical solution or achievement that you are proud of. Anything goes, from a tiny one hour ticket to a large system, we are interested in how you think and your ability in technical writing. Please write at least a few sentences explaining the challenge and your solution, each.",
     category: "project",
   },
+  {
+    id: "happiest-work",
+    question:
+      "When have you felt happiest at work? And when have you felt the least fulfilled?",
+    category: "workstyle",
+  },
 ];
