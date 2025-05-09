@@ -239,4 +239,22 @@ export const questions: Question[] = [
       "When have you felt happiest at work? And when have you felt the least fulfilled?",
     category: "workstyle",
   },
+  {
+    id: "interesting-topic",
+    question:
+      "What’s the most recent idea, book, blog post, or talk that changed how you think about your craft?",
+    category: "general",
+  },
+  {
+    id: "unpopular-opinion",
+    question:
+      "What’s a controversial or unpopular opinion you hold about software engineering, and why?",
+    category: "general",
+  },
+  {
+    id: "ai-interfaces",
+    question:
+      "Please, briefly describe your experience with AI-driven interfaces",
+    category: "general",
+  },
 ];

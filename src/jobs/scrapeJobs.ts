@@ -46,6 +46,11 @@ export async function runDailyJobScraping(): Promise<void> {
       existingJobs.map((j) => j.url.trim().toLowerCase())
     );
 
+    // to add support to the following sites:
+    // https://cryptocurrencyjobs.co/?ref=nodesk
+    // https://javascript.jobs/remote
+    // https://tryremote.com/remote-worldwide-tech-jobs
+
     const sources = [
       {
         name: "NoDesk - Customer Support",
