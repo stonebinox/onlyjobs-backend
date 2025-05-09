@@ -512,3 +512,32 @@ export const updatePassword = asyncHandler(
     });
   }
 );
+
+// @desc    Update minimum match score
+// @route   PUT /api/users/update-mini-score
+// @access  Private
+export const updateMinMatchScore = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { minScore } = req.body;
+
+    if (minScore < 0 || minScore > 100) {
+      res.status(400);
+      throw new Error("Please provide a valid score between 0 and 100");
+    }
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    user.preferences.minScore = minScore;
+    await user.save();
+
+    res.status(200).json({
+      message: "Minimum match score updated successfully",
+    });
+  }
+);
