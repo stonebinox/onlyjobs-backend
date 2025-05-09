@@ -14,6 +14,7 @@ import {
   createAnswer,
   getUserProfile,
   updateUserEmailAddress,
+  updatePassword,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -43,6 +44,8 @@ router.get("/answers", protect, getAnsweredQuestions);
 router.post("/skip-question", protect, setSkippedQuestion);
 router.post("/create-answer", protect, createAnswer);
 router.put("/update-email", protect, updateUserEmailAddress);
+router.put("/password", protect, updatePassword);
+
 // Unused routes
 router.post("/skip/:jobId", protect, skipJob);
 

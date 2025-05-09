@@ -476,3 +476,39 @@ export const updateUserEmailAddress = asyncHandler(
     });
   }
 );
+
+// @desc    update password
+// @route   PUT /api/users/password
+// @access  Private
+export const updatePassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      res.status(400);
+      throw new Error("Please provide both old and new passwords");
+    }
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+    if (!isMatch) {
+      res.status(401);
+      throw new Error("Old password is incorrect");
+    }
+
+    user.password = await bcrypt.hash(newPassword, saltRounds);
+    await user.save();
+
+    res.status(200).json({
+      message: "Password updated successfully",
+    });
+  }
+);
