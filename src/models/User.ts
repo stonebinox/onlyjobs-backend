@@ -23,6 +23,7 @@ export interface IUser extends Document {
     remoteOnly: boolean;
     minSalary: number;
     industries: string[];
+    minScore: number;
   };
   skippedJobs: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -54,6 +55,7 @@ const UserSchema: Schema = new Schema(
       remoteOnly: { type: Boolean, default: false },
       minSalary: { type: Number, default: 0 },
       industries: [String],
+      minScore: { type: Number, default: 30 },
     },
     skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
     isVerified: { type: Boolean, default: false },

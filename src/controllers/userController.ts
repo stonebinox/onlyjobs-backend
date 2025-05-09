@@ -446,3 +446,33 @@ export const getUserProfile = asyncHandler(
     });
   }
 );
+
+// @desc    Update user email address
+// @route   PUT /api/users/email
+// @access  Private
+export const updateUserEmailAddress = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email || email.trim() === "") {
+      res.status(400);
+      throw new Error("Please provide a valid email");
+    }
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    // todo: we should attempt to send a verification email here
+    user.email = email;
+    await user.save();
+
+    res.status(200).json({
+      message: "Email updated successfully",
+    });
+  }
+);
