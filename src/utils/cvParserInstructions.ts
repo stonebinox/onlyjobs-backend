@@ -5,7 +5,13 @@ Your output must be a clean JSON object matching the exact format below, with no
 
 Always include all keys in the object. If any value is not found, return an empty array or an empty string, not null or undefined.
 
-Do not summarize long lists. Include all entries found in the document, especially for "experience", "projects", and "skills". Do not truncate any information.
+Important notes:
+- Extract skills from all parts of the document: skill sections, work history, and project descriptions.
+- If a skill is mentioned multiple times across different jobs/projects, increase its rating accordingly.
+- If a skill is implied through common usage (e.g., React implies HTML/CSS/JS), include those skills as well.
+- Return the skills as an array of strings formatted as: "Skill Name (Rating/10)".
+- Use your best judgment to infer skill ratings based on how frequently and prominently the skill is mentioned. 
+- Avoid duplicates and use consistent capitalization (e.g., "React", not "react" or "REACT").
 
 Return data in this structure:
 \`\`\`ts
@@ -14,7 +20,7 @@ Return data in this structure:
   "location": string,
   "resume": {
     "summary": string,
-    "skills": string[],
+    "skills": string[], // Each item: "Skill (Rating/10)", sorted by rating descending
     "experience": string[],
     "education": string[],
     "certifications": string[],
@@ -34,6 +40,5 @@ Return data in this structure:
 }
 \`\`\`
 
-Use clear and complete bullet points for every item in each list. Never merge multiple items into one unless they are clearly a single entry.
-Use English only.
+Use English only. Do not truncate lists.
 `;
