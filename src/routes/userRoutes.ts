@@ -12,6 +12,7 @@ import {
   getAnsweredQuestions,
   setSkippedQuestion,
   createAnswer,
+  getUserProfile,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -27,6 +28,7 @@ router.post("/auth", authenticateUser);
 router.get("/username", protect, getUserName);
 router.get("/active-count", protect, getActiveUserCount);
 router.put("/profile", protect, updateUserProfile);
+router.get("/profile", protect, getUserProfile);
 router.post("/cv", protect, upload.single("file"), updateUserCV);
 router.get("/question", protect, getQuestion);
 router.post("/answer", protect, setUserAnswer);

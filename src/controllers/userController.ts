@@ -420,3 +420,29 @@ export const skipJob = asyncHandler(async (req: Request, res: Response) => {
     message: "Job skipped successfully",
   });
 });
+
+// @desc    Get user profile
+// @route   GET /api/users/profile
+// @access  Private
+export const getUserProfile = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    res.status(200).json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        preferences: user.preferences,
+        resume: user.resume,
+        createdAt: user.createdAt,
+      },
+    });
+  }
+);
