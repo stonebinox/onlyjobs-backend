@@ -20,6 +20,7 @@ import {
 } from "../services/userService";
 import { generateToken } from "../utils/generateToken";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
+import { deleteAllMatches } from "../services/matchingService";
 
 const saltRounds = 10;
 
@@ -538,6 +539,51 @@ export const updateMinMatchScore = asyncHandler(
 
     res.status(200).json({
       message: "Minimum match score updated successfully",
+    });
+  }
+);
+
+// @desc Resets a user's account to its initial state
+// @route POST /api/users/factory-reset
+// @access Private
+export const factoryResetUserAccount = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    user.resume = {
+      skills: [],
+      experience: [],
+      education: [],
+      summary: "",
+      certifications: [],
+      languages: [],
+      projects: [],
+      achievements: [],
+      volunteerExperience: [],
+      interests: [],
+    };
+    user.preferences = {
+      jobTypes: [],
+      location: [],
+      remoteOnly: false,
+      minSalary: 0,
+      industries: [],
+      minScore: 30,
+    };
+    user.skippedJobs = [];
+    user.qna = [];
+    await user.save();
+    await deleteAllMatches(userId);
+    // todo: we should reset any usage metrics in the future if any
+
+    res.status(200).json({
+      message: "User account reset successfully",
     });
   }
 );

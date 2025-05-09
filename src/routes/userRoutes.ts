@@ -16,6 +16,7 @@ import {
   updateUserEmailAddress,
   updatePassword,
   updateMinMatchScore,
+  factoryResetUserAccount,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -47,6 +48,7 @@ router.post("/create-answer", protect, createAnswer);
 router.put("/update-email", protect, updateUserEmailAddress);
 router.put("/password", protect, updatePassword);
 router.put("/update-mini-score", protect, updateMinMatchScore);
+router.post("/factory-reset", protect, factoryResetUserAccount);
 
 // Unused routes
 router.post("/skip/:jobId", protect, skipJob);
