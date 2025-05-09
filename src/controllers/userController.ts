@@ -587,3 +587,25 @@ export const factoryResetUserAccount = asyncHandler(
     });
   }
 );
+
+// @desc    Delete user account
+// @route   DELETE /api/users/delete
+// @access  Private
+export const deleteUserAccount = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    await deleteAllMatches(userId);
+    await User.findByIdAndDelete(userId);
+
+    res.status(200).json({
+      message: "User account deleted successfully",
+    });
+  }
+);
