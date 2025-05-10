@@ -1115,3 +1115,284 @@ async function fetchNoDeskJobDetails(url: string): Promise<{
     return {};
   }
 }
+
+/**
+ * Scrapes jobs from TryRemote
+ * HTML-based scraper targeting the specific markup structure
+ */
+export async function scrapeTryRemoteJobs(
+  url: string = "https://tryremote.com/remote-worldwide-tech-jobs"
+): Promise<ScrapedJob[]> {
+  try {
+    console.log(`Starting to scrape TryRemote from: ${url}`);
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      },
+    });
+
+    const $ = load(response.data);
+    const jobs: ScrapedJob[] = [];
+
+    // Calculate the cutoff date (30 days ago)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Target the job listing container divs based on the simplified HTML structure provided
+    // Each job appears to be in a div with class "border border-solid flex"
+    $("div.border.flex, div.border.border-solid.flex").each((_, element) => {
+      try {
+        // Extract job title - found in an h2 > a > span.text-2xl element
+        const titleElement = $(element).find(
+          "h2 a span.text-2xl, h2 a span.font-bold"
+        );
+        const title = titleElement.text().trim();
+
+        // Extract company name - found in the first span inside the a element
+        const companyElement = $(element).find(
+          "h2 a span.text-lg, h2 a span:first-child"
+        );
+        let company = companyElement.text().trim();
+        // Clean up the company name (removing "is hiring" if present)
+        company = company
+          .replace(/\s*is hiring\s*$/i, "")
+          .replace(/\s*\<.*?\>\s*/g, "");
+
+        // Extract job URL - from the anchor tag
+        const jobLink = $(element).find("h2 a").attr("href");
+        const fullJobURL = jobLink?.startsWith("http")
+          ? jobLink
+          : `https://tryremote.com${jobLink}`;
+
+        // Extract location data
+        const locationElements = $(element).find(
+          'a.text-primaryGrey.opacity-70.uppercase, a[href*="remote-"]'
+        );
+        const locations: string[] = [];
+        locationElements.each((_, locElement) => {
+          const location = $(locElement)
+            .text()
+            .trim()
+            .replace(/^[•\s]+/, ""); // Remove bullets
+          if (location && !locations.includes(location)) {
+            locations.push(location);
+          }
+        });
+
+        // Extract skills/tags - from links with specific classes
+        const tags: string[] = [];
+        $(element)
+          .find(
+            "a.flex.items-center.gap-1.text-primaryGrey.bg-thirdGrey, a.rounded-xl"
+          )
+          .each((_, tagElement) => {
+            const tag = $(tagElement).text().trim();
+            if (tag && !tags.includes(tag)) {
+              tags.push(tag);
+            }
+          });
+
+        // Extract posted date/time - from a div with the time text
+        let postedDate: Date | undefined = undefined;
+        const timeText = $(element)
+          .find("div.text-sm:last-child")
+          .text()
+          .trim();
+        if (timeText) {
+          if (timeText.includes("h")) {
+            // For "Xh" format (hours)
+            const hoursMatch = timeText.match(/(\d+)h/);
+            if (hoursMatch && hoursMatch[1]) {
+              const hoursAgo = parseInt(hoursMatch[1], 10);
+              postedDate = new Date();
+              postedDate.setHours(postedDate.getHours() - hoursAgo);
+            }
+          } else if (timeText.includes("d")) {
+            // For "Xd" format (days)
+            const daysMatch = timeText.match(/(\d+)d/);
+            if (daysMatch && daysMatch[1]) {
+              const daysAgo = parseInt(daysMatch[1], 10);
+              postedDate = new Date();
+              postedDate.setDate(postedDate.getDate() - daysAgo);
+            }
+          } else if (timeText.includes("w")) {
+            // For "Xw" format (weeks)
+            const weeksMatch = timeText.match(/(\d+)w/);
+            if (weeksMatch && weeksMatch[1]) {
+              const weeksAgo = parseInt(weeksMatch[1], 10);
+              postedDate = new Date();
+              postedDate.setDate(postedDate.getDate() - weeksAgo * 7);
+            }
+          }
+        }
+
+        // Skip jobs older than 30 days
+        if (postedDate && postedDate < thirtyDaysAgo) {
+          console.log(
+            `Skipping job older than 30 days: ${title} at ${company}`
+          );
+          return; // Skip this job and continue with the next one
+        }
+
+        // Create the job object if we have the minimum required fields
+        if (title && company && fullJobURL) {
+          const job: ScrapedJob = {
+            title,
+            company,
+            location: locations.length > 0 ? locations : ["Remote"], // Default to Remote if no location found
+            url: fullJobURL,
+            tags,
+            source: "TryRemote",
+            postedDate,
+            scrapedDate: new Date(),
+          };
+
+          // Add job to the list
+          jobs.push(job);
+          console.log(`Found job: ${title} at ${company}`);
+        }
+      } catch (err) {
+        console.error("Error parsing TryRemote job element:", err);
+      }
+    });
+
+    // If we found jobs on the listing page, fetch their detailed descriptions
+    const detailedJobs: ScrapedJob[] = [];
+
+    for (let i = 0; i < jobs.length; i++) {
+      try {
+        console.log(
+          `Fetching details for job ${i + 1}/${jobs.length}: ${jobs[i].title}`
+        );
+        const detailedJob = await fetchTryRemoteJobDetails(jobs[i]);
+
+        // Additional check to make sure we don't include old jobs discovered from detail page
+        if (detailedJob.postedDate && detailedJob.postedDate < thirtyDaysAgo) {
+          console.log(
+            `Skipping job older than 30 days (from details): ${detailedJob.title}`
+          );
+          continue;
+        }
+
+        detailedJobs.push(detailedJob);
+
+        // Add delay between requests to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`Error fetching details for ${jobs[i].title}:`, error);
+        detailedJobs.push(jobs[i]); // Add the basic job without details
+      }
+    }
+
+    console.log(
+      `Successfully scraped ${detailedJobs.length} jobs from TryRemote`
+    );
+    return detailedJobs;
+  } catch (error) {
+    console.error("Error scraping TryRemote:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetches detailed job information from individual TryRemote job pages
+ */
+async function fetchTryRemoteJobDetails(job: ScrapedJob): Promise<ScrapedJob> {
+  try {
+    const response = await axios.get(job.url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      },
+    });
+
+    const $ = load(response.data);
+
+    // Extract job description from the main content area
+    let description = "";
+    $("main article, main section, main .job-description")
+      .find("p, li, h1, h2, h3, h4, h5, h6, pre, code")
+      .each((_, el) => {
+        const text = $(el).text().trim();
+        if (!text) return;
+
+        if (el.tagName.match(/^h[1-6]$/i)) {
+          description += `\n\n## ${text}\n\n`;
+        } else if (el.tagName === "li") {
+          description += `\n• ${text}`;
+        } else if (el.tagName === "pre" || el.tagName === "code") {
+          description += `\n\n\`\`\`\n${text}\n\`\`\`\n\n`;
+        } else {
+          description += `\n\n${text}`;
+        }
+      });
+
+    // Clean up the description
+    description = description.replace(/\n{3,}/g, "\n\n").trim();
+    job.description = description;
+
+    // Try to extract structured data if available
+    $('script[type="application/ld+json"]').each((_, scriptEl) => {
+      try {
+        const jsonText = $(scriptEl).html();
+        if (!jsonText) return;
+
+        const jsonData = JSON.parse(jsonText);
+
+        if (jsonData && jsonData["@type"] === "JobPosting") {
+          // Extract job description if not already found
+          if (!job.description && jsonData.description) {
+            job.description = jsonData.description;
+          }
+
+          // Extract salary information if available
+          if (jsonData.baseSalary) {
+            const salaryInfo = jsonData.baseSalary;
+            job.salary = {
+              currency: salaryInfo.currency || "USD",
+              estimated: false,
+            };
+
+            if (salaryInfo.value) {
+              if (salaryInfo.value.minValue)
+                job.salary.min = Number(salaryInfo.value.minValue);
+              if (salaryInfo.value.maxValue)
+                job.salary.max = Number(salaryInfo.value.maxValue);
+            } else {
+              if (salaryInfo.minValue)
+                job.salary.min = Number(salaryInfo.minValue);
+              if (salaryInfo.maxValue)
+                job.salary.max = Number(salaryInfo.maxValue);
+            }
+          }
+
+          // Extract additional skills/requirements
+          if (
+            Array.isArray(jsonData.skills) &&
+            (!job.tags || job.tags.length === 0)
+          ) {
+            job.tags = jsonData.skills;
+          }
+
+          // Extract posting date if not already found
+          if (!job.postedDate && jsonData.datePosted) {
+            try {
+              job.postedDate = new Date(jsonData.datePosted);
+            } catch (e) {
+              // Invalid date format, ignore
+            }
+          }
+        }
+      } catch (e) {
+        // JSON parsing error, ignore
+        console.warn("Error parsing JSON-LD:", e);
+      }
+    });
+
+    return job;
+  } catch (error) {
+    console.error(`Error fetching details for ${job.url}:`, error);
+    return job; // Return the basic job information if we couldn't get details
+  }
+}

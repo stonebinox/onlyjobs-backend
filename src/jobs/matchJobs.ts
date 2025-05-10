@@ -6,6 +6,7 @@ import { filterJobsForUser } from "../utils/filterJobsForUser";
 
 export async function runDailyJobMatching(): Promise<void> {
   console.log("Starting daily job matching task...");
+  console.time("Job matching");
 
   try {
     // Get all users
@@ -39,7 +40,7 @@ export async function runDailyJobMatching(): Promise<void> {
 
         const matchResult = await matchUserToJob(user, job);
 
-        if (matchResult.matchScore < 25) {
+        if (matchResult.matchScore < (user.preferences?.minScore || 30)) {
           console.log(
             `Skipping job ${job.title} for user ${user.email} - Score: ${matchResult.matchScore}`
           );
@@ -65,6 +66,8 @@ export async function runDailyJobMatching(): Promise<void> {
     console.log("Daily job matching completed successfully");
   } catch (error) {
     console.error("Error during job matching:", error);
+  } finally {
+    console.timeEnd("Job matching");
   }
 }
 

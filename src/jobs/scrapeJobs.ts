@@ -7,6 +7,7 @@ import {
   scrapeRemoteOK,
   scrapeLandingJobs,
   scrapeNoDesk,
+  scrapeTryRemoteJobs,
 } from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
@@ -49,9 +50,23 @@ export async function runDailyJobScraping(): Promise<void> {
     // to add support to the following sites:
     // https://cryptocurrencyjobs.co/?ref=nodesk
     // https://javascript.jobs/remote
-    // https://tryremote.com/remote-worldwide-tech-jobs
 
     const sources = [
+      {
+        name: "TryRemote - Freelance",
+        url: "https://tryremote.com/remote-freelance-tech-jobs",
+        scraper: scrapeTryRemoteJobs,
+      },
+      {
+        name: "TryRemote - Full Time",
+        url: "https://tryremote.com/remote-full-time-tech-jobs",
+        scraper: scrapeTryRemoteJobs,
+      },
+      {
+        name: "TryRemote",
+        url: "https://tryremote.com/remote-worldwide-tech-jobs",
+        scraper: scrapeTryRemoteJobs,
+      },
       {
         name: "NoDesk - Customer Support",
         url: "https://nodesk.co/remote-jobs/customer-support/",
