@@ -62,7 +62,7 @@ const UserSchema: Schema = new Schema(
     qna: [
       {
         questionId: { type: String, required: true },
-        answer: { type: String, required: true },
+        answer: { type: String, default: "" },
         mode: { type: String, enum: ["text", "voice"], default: "text" },
         skipped: { type: Boolean, default: false },
       },
