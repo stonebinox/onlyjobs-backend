@@ -4,16 +4,30 @@ import MatchRecord from "../models/MatchRecord";
 import { matchUserToJob } from "../services/matchingService";
 import { filterJobsForUser } from "../utils/filterJobsForUser";
 
-export async function runDailyJobMatching(): Promise<void> {
+export async function runDailyJobMatching(userId?: string): Promise<void> {
   console.log("Starting daily job matching task...");
   console.time("Job matching");
 
   try {
-    // Get all users
-    const users = await User.find();
-    console.log(`Found ${users.length} users to match with jobs`);
+    // Get users based on whether userId is provided
+    let users;
 
-    // Get jobs from the past week only
+    if (userId) {
+      users = await User.findOne({ _id: userId });
+      console.log(`Running matching for specific user: ${userId}`);
+
+      if (!users) {
+        console.log(`No user found with email: ${userId}`);
+        return;
+      }
+
+      users = [users]; // Wrap in an array for consistency
+    } else {
+      users = await User.find(); // todo: we should match only based on whether they're verified
+      console.log(`Found ${users.length} users to match with jobs`);
+    }
+
+    // Get jobs from the past month
     const oneMonthAgo = new Date();
     oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
