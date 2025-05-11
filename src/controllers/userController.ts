@@ -535,7 +535,6 @@ export const updateMinMatchScore = asyncHandler(
     }
 
     user.preferences.minScore = minScore;
-    console.log("userx", user);
     await user.save();
 
     res.status(200).json({
