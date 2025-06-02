@@ -58,6 +58,18 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
           console.log(
             `Skipping job ${job.title} for user ${user.email} - Score: ${matchResult.matchScore}`
           );
+
+          await MatchRecord.create({
+            userId: user._id,
+            jobId: job._id,
+            matchScore: matchResult.matchScore,
+            verdict: "skipped",
+            reasoning: matchResult.reasoning || "Below minScore threshold",
+            freshness: matchResult.freshness,
+            clicked: false,
+            skipped: true,
+          });
+
           continue;
         }
 
