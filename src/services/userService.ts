@@ -102,7 +102,9 @@ export const getAIQuestion = async (user: IUser) => {
   try {
     const pendingQuestions = questions.filter((question: Question) => {
       const existingIndex = answers.findIndex(
-        (answer) => answer.questionId === question.id
+        (answer) =>
+          answer.questionId === question.id ||
+          (answer.questionId === question.id && answer.skipped)
       );
 
       return existingIndex < 0;
