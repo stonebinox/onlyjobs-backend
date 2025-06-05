@@ -156,7 +156,8 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
       listings.forEach((el) => {
         const anchor = el.querySelectorAll("a")[1];
         const rawHref = anchor?.getAttribute("href") || "";
-        if (!rawHref.startsWith("/remote-jobs/")) return;
+
+        if (!rawHref.startsWith("/listings/")) return;
 
         const jobURL = `https://weworkremotely.com${rawHref}`;
         const title =
