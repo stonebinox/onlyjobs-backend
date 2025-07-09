@@ -123,7 +123,7 @@ export const questions: Question[] = [
   {
     id: "side-projects",
     question: "Have you ever had a side project or startup idea?",
-    category: "geenral",
+    category: "general",
   },
   {
     id: "knowledge-updating",
@@ -262,5 +262,81 @@ export const questions: Question[] = [
     question:
       "Describe the most complex SaaS or AI project you’ve built entirely on your own.",
     category: "project",
+  },
+  // Additional commonly asked interview questions (tech and non-tech)
+  {
+    id: "motivation-best-work",
+    question: "What motivates you to do your best work?",
+    category: "personal",
+  },
+  {
+    id: "failure-lesson",
+    question: "Describe a time you failed. What did you learn from it?",
+    category: "general",
+  },
+  {
+    id: "handle-stress",
+    question: "How do you handle stress or tight deadlines?",
+    category: "workstyle",
+  },
+  {
+    id: "conflict-resolution",
+    question: "Tell us about a time you had a conflict with a coworker. How did you resolve it?",
+    category: "workstyle",
+  },
+  {
+    id: "career-goals",
+    question: "What are your long-term career goals?",
+    category: "personal",
+  },
+  {
+    id: "prioritization-urgent-tasks",
+    question: "How do you prioritize tasks when everything feels urgent?",
+    category: "workstyle",
+  },
+  {
+    id: "workplace-culture-values",
+    question: "What do you value most in a workplace culture?",
+    category: "general",
+  },
+  {
+    id: "constructive-criticism",
+    question: "Describe a time you received constructive criticism. How did you respond?",
+    category: "workstyle",
+  },
+  {
+    id: "work-life-balance",
+    question: "What do you do to maintain work-life balance?",
+    category: "workstyle",
+  },
+  {
+    id: "change-last-job",
+    question: "If you could change one thing about your last job, what would it be and why?",
+    category: "workstyle",
+  },
+  {
+    id: "proudest-nonwork-accomplishment",
+    question: "What accomplishment are you most proud of outside of work?",
+    category: "achievement",
+  },
+  {
+    id: "organization-methods",
+    question: "How do you stay organized?",
+    category: "workstyle",
+  },
+  {
+    id: "learning-approach",
+    question: "What’s your approach to learning new skills?",
+    category: "workstyle",
+  },
+  {
+    id: "above-and-beyond",
+    question: "Describe a time you went above and beyond for a project or team.",
+    category: "project",
+  },
+  {
+    id: "best-advice",
+    question: "What’s the best piece of advice you’ve ever received?",
+    category: "personal",
   },
 ];
