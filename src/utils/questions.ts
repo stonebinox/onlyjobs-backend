@@ -257,4 +257,10 @@ export const questions: Question[] = [
       "Please, briefly describe your experience with AI-driven interfaces",
     category: "general",
   },
+  {
+    id: "complex-saas-ai-project",
+    question:
+      "Describe the most complex SaaS or AI project you’ve built entirely on your own.",
+    category: "project",
+  },
 ];
