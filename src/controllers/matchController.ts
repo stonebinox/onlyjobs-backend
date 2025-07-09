@@ -40,6 +40,7 @@ export const getMatchCount = expressAsyncHandler(
     const matchCount = await MatchRecord.countDocuments({
       userId,
       createdAt: { $gte: thirtyDaysAgo },
+      skipped: false,
     });
 
     if (matchCount === null) {
