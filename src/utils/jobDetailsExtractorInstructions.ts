@@ -21,7 +21,8 @@ You are a job details extractor. Your task is to extract relevant information fr
   - Preferred Skills
   - Tech Stack
   - Location or Timezone Requirements
-  - Compensation Details (if mentioned)
+  - Team or Company Culture
+  - Compensation/Salary Details (if mentioned)
   - Work Culture or Benefits (only if clearly described)
 - Avoid fluff, mission statements, or generic company intros.
 - Return these bullet points as a single markdown-style string joined by \`\\n\`, inside the \`description\` field.
