@@ -281,7 +281,8 @@ export const questions: Question[] = [
   },
   {
     id: "conflict-resolution",
-    question: "Tell us about a time you had a conflict with a coworker. How did you resolve it?",
+    question:
+      "Tell us about a time you had a conflict with a coworker. How did you resolve it?",
     category: "workstyle",
   },
   {
@@ -301,7 +302,8 @@ export const questions: Question[] = [
   },
   {
     id: "constructive-criticism",
-    question: "Describe a time you received constructive criticism. How did you respond?",
+    question:
+      "Describe a time you received constructive criticism. How did you respond?",
     category: "workstyle",
   },
   {
@@ -311,7 +313,8 @@ export const questions: Question[] = [
   },
   {
     id: "change-last-job",
-    question: "If you could change one thing about your last job, what would it be and why?",
+    question:
+      "If you could change one thing about your last job, what would it be and why?",
     category: "workstyle",
   },
   {
@@ -331,12 +334,19 @@ export const questions: Question[] = [
   },
   {
     id: "above-and-beyond",
-    question: "Describe a time you went above and beyond for a project or team.",
+    question:
+      "Describe a time you went above and beyond for a project or team.",
     category: "project",
   },
   {
     id: "best-advice",
     question: "What’s the best piece of advice you’ve ever received?",
     category: "personal",
+  },
+  {
+    id: "workplace-innovation",
+    question:
+      "What is one of the most significant before-and-after results you have achieved for a client or employer?",
+    category: "project",
   },
 ];
