@@ -200,7 +200,10 @@ export async function runDailyJobScraping(): Promise<void> {
             job.tags = enriched.tags || job.tags || [];
             job.postedDate = new Date(enriched.postedDate || Date.now());
             job.url = enriched.url || job.url;
-            job.description = enriched.description;
+            job.description =
+              enriched.description ||
+              job.description ||
+              "-- No description available --";
             job.salary = enriched.salary;
             job.scrapedDate = new Date(enriched.scrapedDate || Date.now());
           }

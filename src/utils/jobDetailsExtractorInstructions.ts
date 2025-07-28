@@ -59,7 +59,7 @@ interface JobListing {
   };
   tags: string[];
   source: string;
-  description: string; // This should now be a bullet-point summary, not raw description text
+  description: string; // This should now be a bullet-point summary, not raw description text. This can say "No description available" if nothing useful can be extracted.
   url: string;
   postedDate: Date;
   scrapedDate: Date;

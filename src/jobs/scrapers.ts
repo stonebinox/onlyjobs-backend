@@ -1106,7 +1106,7 @@ async function fetchNoDeskJobDetails(url: string): Promise<{
     }
 
     return {
-      description: description.trim(),
+      description: description?.trim() || "-- No description available --",
       additionalTags,
       salary,
       applicationUrl,
