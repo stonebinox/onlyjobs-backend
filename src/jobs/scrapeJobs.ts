@@ -52,66 +52,66 @@ export async function runDailyJobScraping(): Promise<void> {
     // https://javascript.jobs/remote
 
     const sources = [
-      {
-        name: "TryRemote - Freelance",
-        url: "https://tryremote.com/remote-freelance-tech-jobs",
-        scraper: scrapeTryRemoteJobs,
-      },
-      {
-        name: "TryRemote - Full Time",
-        url: "https://tryremote.com/remote-full-time-tech-jobs",
-        scraper: scrapeTryRemoteJobs,
-      },
-      {
-        name: "TryRemote",
-        url: "https://tryremote.com/remote-worldwide-tech-jobs",
-        scraper: scrapeTryRemoteJobs,
-      },
-      {
-        name: "NoDesk - Customer Support",
-        url: "https://nodesk.co/remote-jobs/customer-support/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Design",
-        url: "https://nodesk.co/remote-jobs/design/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Engineering",
-        url: "https://nodesk.co/remote-jobs/engineering/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Marketing",
-        url: "https://nodesk.co/remote-jobs/marketing/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Non-Tech",
-        url: "https://nodesk.co/remote-jobs/non-tech/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Operations",
-        url: "https://nodesk.co/remote-jobs/operations/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Product",
-        url: "https://nodesk.co/remote-jobs/product/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - Sales",
-        url: "https://nodesk.co/remote-jobs/sales/",
-        scraper: scrapeNoDesk,
-      },
-      {
-        name: "NoDesk - All Other",
-        url: "https://nodesk.co/remote-jobs/",
-        scraper: scrapeNoDesk,
-      },
+      // {
+      //   name: "TryRemote - Freelance",
+      //   url: "https://tryremote.com/remote-freelance-tech-jobs",
+      //   scraper: scrapeTryRemoteJobs,
+      // },
+      // {
+      //   name: "TryRemote - Full Time",
+      //   url: "https://tryremote.com/remote-full-time-tech-jobs",
+      //   scraper: scrapeTryRemoteJobs,
+      // },
+      // {
+      //   name: "TryRemote",
+      //   url: "https://tryremote.com/remote-worldwide-tech-jobs",
+      //   scraper: scrapeTryRemoteJobs,
+      // },
+      // {
+      //   name: "NoDesk - Customer Support",
+      //   url: "https://nodesk.co/remote-jobs/customer-support/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Design",
+      //   url: "https://nodesk.co/remote-jobs/design/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Engineering",
+      //   url: "https://nodesk.co/remote-jobs/engineering/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Marketing",
+      //   url: "https://nodesk.co/remote-jobs/marketing/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Non-Tech",
+      //   url: "https://nodesk.co/remote-jobs/non-tech/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Operations",
+      //   url: "https://nodesk.co/remote-jobs/operations/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Product",
+      //   url: "https://nodesk.co/remote-jobs/product/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - Sales",
+      //   url: "https://nodesk.co/remote-jobs/sales/",
+      //   scraper: scrapeNoDesk,
+      // },
+      // {
+      //   name: "NoDesk - All Other",
+      //   url: "https://nodesk.co/remote-jobs/",
+      //   scraper: scrapeNoDesk,
+      // },
       {
         name: "WeWorkRemotely - Full Stack",
         url: "https://weworkremotely.com/categories/remote-full-stack-programming-jobs",
@@ -162,16 +162,16 @@ export async function runDailyJobScraping(): Promise<void> {
         url: "https://weworkremotely.com/categories/remote-product-jobs",
         scraper: scrapeWeWorkRemotely,
       },
-      {
-        name: "RemoteOK",
-        url: "https://remoteok.com/remote-dev-jobs",
-        scraper: scrapeRemoteOK,
-      },
-      {
-        name: "Landing.jobs",
-        url: "https://landing.jobs/jobs",
-        scraper: scrapeLandingJobs,
-      },
+      // {
+      //   name: "RemoteOK",
+      //   url: "https://remoteok.com/remote-dev-jobs",
+      //   scraper: scrapeRemoteOK,
+      // },
+      // {
+      //   name: "Landing.jobs",
+      //   url: "https://landing.jobs/jobs",
+      //   scraper: scrapeLandingJobs,
+      // },
     ];
 
     for (const source of sources) {
