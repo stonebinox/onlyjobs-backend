@@ -58,8 +58,7 @@ export const parseUserCV = async (uploadedFilePath: string) => {
         : rawText;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
+      model: "gpt-5-mini",
       messages: [
         { role: "system", content: cvParserInstructions },
         {
@@ -111,8 +110,7 @@ export const getAIQuestion = async (user: IUser) => {
     });
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -156,8 +154,7 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",

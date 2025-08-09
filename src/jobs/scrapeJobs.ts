@@ -17,7 +17,7 @@ async function enrichJobWithOpenAI(job: ScrapedJob) {
       apiKey: process.env.OPENAI_API_KEY,
     });
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "developer",
