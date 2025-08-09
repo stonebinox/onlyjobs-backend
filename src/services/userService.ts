@@ -288,8 +288,7 @@ export const getAnswerForQuestion = async (user: IUser, question: string) => {
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
