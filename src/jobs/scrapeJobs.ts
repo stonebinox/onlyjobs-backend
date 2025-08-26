@@ -9,6 +9,7 @@ import {
   scrapeNoDesk,
   scrapeTryRemoteJobs,
   scrapeNearJobs,
+  scrapeCryptoJobsList,
 } from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
@@ -53,6 +54,11 @@ export async function runDailyJobScraping(): Promise<void> {
     // https://javascript.jobs/remote
 
     const sources = [
+      {
+        name: "Cryptocurrency Jobs",
+        url: "https://cryptocurrencyjobs.co",
+        scraper: scrapeCryptoJobsList,
+      },
       {
         name: "NEAR Careers",
         url: "https://api.getro.com/api/v2/collections/1338/search/jobs",

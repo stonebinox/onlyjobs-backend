@@ -1510,3 +1510,120 @@ export async function scrapeNearJobs(
     return [];
   }
 }
+
+/**
+ * Scrapes jobs from CryptoJobsList
+ * Each job is a <li class=grid ...> (no double quotes)
+ * Description is in <div class=prose> (no double quotes)
+ */
+export async function scrapeCryptoJobsList(
+  url: string = "https://cryptocurrencyjobs.co"
+): Promise<ScrapedJob[]> {
+  try {
+    const domain = "https://cryptocurrencyjobs.co";
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; CryptoJobsScraper/1.0)",
+        Accept: "text/html,application/xhtml+xml,application/xml",
+        Referer: url,
+      },
+    });
+    const $ = load(response.data);
+    const jobs: ScrapedJob[] = [];
+    $("li.grid").each((_, el) => {
+      try {
+        // Title and job URL
+        const titleAnchor = $(el).find("h2 a").first();
+        const title = titleAnchor.text().trim();
+        let jobUrl = titleAnchor.attr("href") || "";
+        if (jobUrl && !jobUrl.startsWith("http")) jobUrl = `${domain}${jobUrl}`;
+
+        // Company
+        const company = $(el).find("h3 a").first().text().trim() || "Unknown";
+
+        // Location (first remote/location anchor)
+        const location =
+          $(el).find('div.flex ul li a[href^="/remote/"]').text().trim() ||
+          $(el).find("div.flex ul li h4 a").first().text().trim() ||
+          "Remote";
+        const locList = location.includes(",")
+          ? location.split(",").map((l) => l.trim())
+          : [location];
+
+        // Tags/skills
+        const tags: string[] = [];
+        $(el)
+          .find("ul.flex.flex-wrap li a, ul.flex.flex-wrap li span")
+          .each((_, tagEl) => {
+            const tag = $(tagEl).text().trim();
+            if (tag) tags.push(tag);
+          });
+
+        // Posted date
+        let postedDate: Date | undefined = undefined;
+        const timeAttr = $(el).find("time").attr("datetime");
+        if (timeAttr) {
+          postedDate = new Date(timeAttr);
+        } else {
+          const postedTxt = $(el)
+            .find("div.inline-block span")
+            .first()
+            .text()
+            .trim();
+          if (/today/i.test(postedTxt)) postedDate = new Date();
+          else if (/yesterday/i.test(postedTxt)) {
+            postedDate = new Date();
+            postedDate.setDate(postedDate.getDate() - 1);
+          } else if (/^(\d+)d$/.test(postedTxt)) {
+            const daysAgo = parseInt(
+              /^(\d+)d$/.exec(postedTxt)?.[1] || "0",
+              10
+            );
+            postedDate = new Date();
+            postedDate.setDate(postedDate.getDate() - daysAgo);
+          }
+        }
+
+        jobs.push({
+          title,
+          company,
+          location: locList,
+          url: jobUrl,
+          tags,
+          source: "CryptoJobsList",
+          scrapedDate: new Date(),
+          postedDate,
+        });
+      } catch (err) {
+        console.warn(
+          "Error extracting job item in CryptoJobsList scraper.",
+          err
+        );
+      }
+    });
+
+    // Fetch details for each job (description in div.prose - note: no quotes in markup)
+    for (let job of jobs) {
+      try {
+        const detailRes = await axios.get(job.url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; CryptoJobsScraper/1.0)",
+          },
+        });
+        const $$ = load(detailRes.data);
+        // Matching <div class=prose> (no quotes!)
+        // Cheerio supports [class~=prose] so use that for robustness
+        const desc = $$(".prose, [class~=prose]").text().trim();
+        if (desc && desc.length) job.description = desc;
+      } catch (err) {
+        console.warn(`Could not fetch description for job: ${job.title}`);
+      }
+    }
+
+    console.log(`Scraped ${jobs.length} jobs from CryptoJobsList`);
+    return jobs;
+  } catch (error) {
+    console.error("Error scraping CryptoJobsList:", error);
+    return [];
+  }
+}
