@@ -1381,6 +1381,7 @@ async function fetchTryRemoteJobDetails(job: ScrapedJob): Promise<ScrapedJob> {
             try {
               job.postedDate = new Date(jsonData.datePosted);
             } catch (e) {
+              console.log("date parsing error", e);
               // Invalid date format, ignore
             }
           }
@@ -1626,4 +1627,155 @@ export async function scrapeCryptoJobsList(
     console.error("Error scraping CryptoJobsList:", error);
     return [];
   }
+}
+
+/**
+ * Scrapes all remote jobs from web3.career (pages 1-25), pairing JobPosting JSON-LD to job rows.
+ * Robustly combines all data; always fetches detail URL from job row.
+ */
+export async function scrapeWeb3CareerJobs(
+  url?: string
+): Promise<ScrapedJob[]> {
+  const baseList = "https://web3.career/remote-jobs";
+  const jobs: ScrapedJob[] = [];
+  const maxPage = 25;
+  for (let page = 1; page <= maxPage; page++) {
+    const url = `${baseList}?page=${page}`;
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; Web3CareerScraper/1.0)",
+          Accept: "text/html,application/xhtml+xml,application/xml",
+        },
+      });
+      const $ = load(response.data);
+      const trs = $("tr.table_row");
+      const scripts = Array.from(
+        $('script[type="application/ld+json"]').toArray()
+      );
+      // Only take those that contain JobPosting (filter invalid/other scripts)
+      const jobJsons = scripts
+        .map((s) => {
+          try {
+            const json = JSON.parse($(s).contents().text());
+            return json && json["@type"] === "JobPosting" ? json : null;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      // Pair each <tr> with corresponding JSON-LD entry
+      trs.each((i, el) => {
+        const jobJson = jobJsons[i];
+        if (!jobJson) return;
+
+        try {
+          // Extract URL from row
+          const row = $(el);
+          const titleAnchor = row.find(".job-title-mobile a").first();
+          let jobUrl = titleAnchor.attr("href") || "";
+          if (jobUrl && !jobUrl.startsWith("http"))
+            jobUrl = `https://web3.career${jobUrl}`;
+          // Parse fields from JSON-LD
+          const title = jobJson.title || titleAnchor.text().trim();
+          const company =
+            (jobJson.hiringOrganization && jobJson.hiringOrganization.name) ||
+            row.find(".job-location-mobile h3").first().text().trim() ||
+            "Unknown";
+          const tags: string[] = [];
+          row.find("span.my-badge-secondary a").each((_, tagEl) => {
+            const tag = $(tagEl).text().trim();
+            if (tag) tags.push(tag);
+          });
+          // Location (prefer jobLocation, then applicantLocationRequirements, then row other)
+          let location = "Remote";
+          if (
+            jobJson.jobLocation &&
+            jobJson.jobLocation.address &&
+            jobJson.jobLocation.address.addressCountry
+          )
+            location = jobJson.jobLocation.address.addressCountry;
+          else if (
+            jobJson.applicantLocationRequirements &&
+            jobJson.applicantLocationRequirements.name
+          )
+            location = jobJson.applicantLocationRequirements.name;
+          else {
+            const l = row
+              .find("td.job-location-mobile span")
+              .first()
+              .text()
+              .trim();
+            if (l) location = l;
+          }
+          const locList = location.includes(",")
+            ? location.split(",").map((l) => l.trim())
+            : [location];
+          // Description
+          const description =
+            typeof jobJson.description === "string"
+              ? jobJson.description.trim()
+              : undefined;
+          // Posted date
+          let postedDate: Date | undefined = undefined;
+
+          if (jobJson.datePosted) {
+            const d = new Date(jobJson.datePosted);
+
+            if (!isNaN(d.getTime())) postedDate = d;
+          }
+
+          // Salary
+          let salary;
+
+          if (jobJson.baseSalary && jobJson.baseSalary.value) {
+            const val = jobJson.baseSalary.value;
+            salary = {
+              min: val.minValue,
+              max: val.maxValue,
+              currency: jobJson.baseSalary.currency || undefined,
+              estimated: false,
+            };
+          }
+          // If JSON has fallback salary (non-nested)
+          if (
+            !salary &&
+            jobJson.baseSalary &&
+            typeof jobJson.baseSalary === "object" &&
+            typeof jobJson.baseSalary.minValue !== "undefined"
+          )
+            salary = {
+              min: jobJson.baseSalary.minValue,
+              max: jobJson.baseSalary.maxValue,
+              currency: jobJson.baseSalary.currency || undefined,
+              estimated: false,
+            };
+          jobs.push({
+            title,
+            company,
+            location: locList,
+            url: jobUrl,
+            tags,
+            source: "Web3Career",
+            postedDate,
+            scrapedDate: new Date(),
+            salary,
+            description,
+          });
+        } catch (err) {
+          console.warn(
+            "Error extracting/pairing job (json-ld+tr row) web3.career",
+            err
+          );
+        }
+      });
+      console.log(`Parsed jobs from page: ${url}`);
+    } catch (err) {
+      console.warn(`Error loading or parsing page: ${url}`);
+    }
+  }
+  console.log(
+    `Scraped ${jobs.length} jobs from Web3Career (25 pages, with structured merge)`
+  );
+  return jobs;
 }
