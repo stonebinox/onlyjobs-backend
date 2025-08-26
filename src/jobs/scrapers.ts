@@ -1397,3 +1397,116 @@ async function fetchTryRemoteJobDetails(job: ScrapedJob): Promise<ScrapedJob> {
     return job; // Return the basic job information if we couldn't get details
   }
 }
+
+async function fetchNearJobDescription(
+  orgSlug: string,
+  jobSlug: string
+): Promise<string | undefined> {
+  try {
+    const url = `https://careers.near.org/companies/${orgSlug}/jobs/${jobSlug}`;
+    const { data } = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; JobScraper/1.0)",
+        Accept: "text/html,application/xhtml+xml,application/xml",
+        Referer: "https://careers.near.org/jobs",
+      },
+    });
+    const $ = load(data);
+    // The description is under data-testid="careerPage"
+    const desc = $('[data-testid="careerPage"]').text().trim();
+
+    return desc && desc.length > 0 ? desc : undefined;
+  } catch (err) {
+    console.warn("Failed to fetch NEAR job detail page", orgSlug, jobSlug, err);
+
+    return undefined;
+  }
+}
+
+/**
+ * Scrapes jobs from NEAR Careers (crypto-focused jobs)
+ * Fetches JSON from getro API
+ */
+export async function scrapeNearJobs(
+  url: string = "https://api.getro.com/api/v2/collections/1338/search/jobs"
+): Promise<ScrapedJob[]> {
+  try {
+    // Compose the request body as used by NEAR Careers site
+    const requestBody = {
+      hitsPerPage: 100, // Increase to get more jobs per request, change as needed
+      page: 0,
+      filters: {}, // No filter: get all jobs.
+      query: "",
+    };
+
+    // Setup needed headers
+    const headers = {
+      accept: "application/json",
+      "content-type": "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+      origin: "https://careers.near.org",
+      referer: "https://careers.near.org/jobs",
+    };
+
+    const { data } = await axios.post(url, requestBody, { headers });
+    const jobsData = (data && data.results && data.results.jobs) || [];
+
+    // Fetch all descriptions in parallel (be gentle rate-wise if this scales up)
+    const jobs: ScrapedJob[] = await Promise.all(
+      jobsData.map(async (job: any) => {
+        let postedDate: Date | undefined = undefined;
+        if (job.created_at) {
+          postedDate = new Date(job.created_at * 1000);
+        }
+        let salary;
+        if (
+          job.compensation_amount_min_cents ||
+          job.compensation_amount_max_cents
+        ) {
+          salary = {
+            min: job.compensation_amount_min_cents
+              ? job.compensation_amount_min_cents / 100
+              : undefined,
+            max: job.compensation_amount_max_cents
+              ? job.compensation_amount_max_cents / 100
+              : undefined,
+            estimated: job.compensation_offers_equity || false,
+            currency: job.compensation_currency || undefined,
+          };
+        }
+        // Compose the detail url using organization.slug and job.slug
+        let description: string | undefined = undefined;
+
+        if (job.organization?.slug && job.slug) {
+          description = await fetchNearJobDescription(
+            job.organization.slug,
+            job.slug
+          );
+        }
+
+        return {
+          title: job.title,
+          company: job.organization?.name || "Unknown",
+          location:
+            Array.isArray(job.locations) && job.locations.length
+              ? job.locations
+              : ["Remote"],
+          url: job.url,
+          tags: job.skills,
+          source: "NEAR Jobs",
+          salary,
+          postedDate,
+          scrapedDate: new Date(),
+          description,
+        };
+      })
+    );
+
+    console.log(`Scraped ${jobs.length} jobs from NEAR Jobs with details`);
+    return jobs;
+  } catch (error) {
+    console.error("Error scraping NEAR Jobs:", error);
+    return [];
+  }
+}

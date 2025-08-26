@@ -55,7 +55,7 @@ export const matchUserToJob = async (
 
   const response = await openai.chat.completions.create({
     model: "gpt-5-mini",
-    temperature: 0.2,
+    temperature: 1,
     messages: [
       { role: "system", content: jobMatcherPrompt },
       {

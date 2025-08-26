@@ -8,6 +8,7 @@ import {
   scrapeLandingJobs,
   scrapeNoDesk,
   scrapeTryRemoteJobs,
+  scrapeNearJobs,
 } from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
@@ -25,7 +26,7 @@ async function enrichJobWithOpenAI(job: ScrapedJob) {
         },
         { role: "user", content: JSON.stringify(job) },
       ],
-      temperature: 0.2,
+      temperature: 1,
     });
 
     const jsonText = response.choices[0].message?.content || "";
@@ -52,6 +53,11 @@ export async function runDailyJobScraping(): Promise<void> {
     // https://javascript.jobs/remote
 
     const sources = [
+      {
+        name: "NEAR Careers",
+        url: "https://api.getro.com/api/v2/collections/1338/search/jobs",
+        scraper: scrapeNearJobs,
+      },
       {
         name: "TryRemote - Freelance",
         url: "https://tryremote.com/remote-freelance-tech-jobs",
