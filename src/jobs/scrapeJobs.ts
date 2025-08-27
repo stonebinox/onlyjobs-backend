@@ -60,7 +60,6 @@ export async function runDailyJobScraping(): Promise<void> {
         url: "https://web3.career/remote-jobs",
         scraper: scrapeWeb3CareerJobs,
       },
-      /*
       {
         name: "Cryptocurrency Jobs",
         url: "https://cryptocurrencyjobs.co",
@@ -190,7 +189,7 @@ export async function runDailyJobScraping(): Promise<void> {
         name: "Landing.jobs",
         url: "https://landing.jobs/jobs",
         scraper: scrapeLandingJobs,
-      }, */
+      }, 
     ];
 
     for (const source of sources) {
