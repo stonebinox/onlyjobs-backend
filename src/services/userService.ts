@@ -11,9 +11,9 @@ import { getQuestionsInstructions } from "../utils/getQuestionsInstructions";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { getAnswersInstructions } from "../utils/getAnswersInstructions";
 import { questions } from "../utils/questions";
-import { Readable } from "stream";
 import { Question } from "../types/Question";
 import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstructions";
+import { IJobListing } from "../models/JobListing";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -270,7 +270,11 @@ export const skipQuestion = async (user: IUser, questionId: string) => {
   return true;
 };
 
-export const getAnswerForQuestion = async (user: IUser, question: string) => {
+export const getAnswerForQuestion = async (
+  user: IUser,
+  question: string,
+  jobResult?: IJobListing | null
+) => {
   const answeredQuestions = await getUserQnA(user);
   const partialUserData = user.toObject();
   delete partialUserData._id;
@@ -280,6 +284,16 @@ export const getAnswerForQuestion = async (user: IUser, question: string) => {
   delete partialUserData.updatedAt;
   delete partialUserData.isVerified;
   delete partialUserData.qna;
+
+  let jobDetails = null;
+
+  if (jobResult) {
+    jobDetails = jobResult.toObject();
+    delete jobDetails._id;
+    delete jobDetails.__v;
+    delete jobDetails.createdAt;
+    delete jobDetails.updatedAt;
+  }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -291,7 +305,8 @@ export const getAnswerForQuestion = async (user: IUser, question: string) => {
           role: "system",
           content: getAnswerComposerInstructions(
             answeredQuestions,
-            partialUserData
+            partialUserData,
+            jobResult
           ),
         },
         {

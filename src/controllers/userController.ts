@@ -21,6 +21,8 @@ import {
 import { generateToken } from "../utils/generateToken";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { deleteAllMatches } from "../services/matchingService";
+import MatchRecord from "../models/MatchRecord";
+import JobListing, { IJobListing } from "../models/JobListing";
 
 const saltRounds = 10;
 
@@ -366,18 +368,36 @@ export const createAnswer = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { question } = req.body;
+
     if (!question || question.trim() === "") {
       res.status(400);
       throw new Error("Please provide a valid question");
     }
     const user = await User.findById(userId);
+
     if (!user) {
       res.status(404);
       throw new Error("User not found");
     }
 
+    let jobDetails = null;
+
+    if (req.body.jobResultId) {
+      const jobResultId = req.body.jobResultId;
+      let jobResult = await MatchRecord.findById(jobResultId);
+
+      if (!jobResult) {
+        jobResult = null;
+      } else {
+        const jobId = jobResult.jobId;
+        jobDetails = (await JobListing.findById(
+          jobId.toString()
+        )) as IJobListing | null;
+      }
+    }
+
     try {
-      const answer = await getAnswerForQuestion(user, question);
+      const answer = await getAnswerForQuestion(user, question, jobDetails);
 
       if (!answer) {
         res.status(200).json({
