@@ -162,7 +162,7 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
         const jobURL = `https://weworkremotely.com${rawHref}`;
         const title =
           el
-            .querySelector("h4.new-listing__header__title")
+            .querySelector("h3.new-listing__header__title")
             ?.textContent?.trim() || "";
         const company =
           el
@@ -218,7 +218,7 @@ export async function scrapeWeWorkRemotely(url: string): Promise<ScrapedJob[]> {
           const blocks: string[] = [];
           document
             .querySelectorAll(
-              ".lis-container__job__content__description div, p, li"
+              ".lis-container__job__content__description, p, li"
             )
             .forEach((el: Element | HTMLElement) => {
               const text = el.textContent?.trim();
