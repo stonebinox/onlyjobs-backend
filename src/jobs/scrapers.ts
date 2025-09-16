@@ -1,6 +1,6 @@
 import axios from "axios";
 import { BasicAcceptedElems, load } from "cheerio";
-import puppeteer, { Browser } from "puppeteer";
+import puppeteer from "puppeteer";
 
 // Common interface for all scraped jobs
 export interface ScrapedJob {
@@ -341,17 +341,20 @@ export async function scrapeRemotive(): Promise<ScrapedJob[]> {
     for (const job of jobLinks) {
       try {
         const jobPage = await browser.newPage();
-        await jobPage.goto(job.url, {
-          waitUntil: "networkidle2",
-          timeout: 30000,
-        });
+        await jobPage.goto(job.url, { waitUntil: "networkidle2" });
 
-        // Extract job description
         const description = await jobPage.evaluate(() => {
-          const descriptionEl = document.querySelector(
-            ".job-description, .description"
-          );
-          return descriptionEl ? descriptionEl.textContent?.trim() || "" : "";
+          const blocks: string[] = [];
+          document
+            .querySelectorAll(
+              ".lis-container__job__content__description div, p, li"
+            )
+            .forEach((el: Element | HTMLElement) => {
+              const text = el.textContent?.trim();
+              if (text) blocks.push(text);
+            });
+
+          return blocks.join("\n");
         });
 
         // Parse the posted date text into a Date object
@@ -1779,3 +1782,32 @@ export async function scrapeWeb3CareerJobs(
   );
   return jobs;
 }
+
+// export async function scrapeWellfound(url?: string): Promise<ScrapedJob[]> {
+//   const response = await axios.get(
+//     `https://api.scraperapi.com/?api_key=${process.env.SCRAPER_API_KEY}&url=${url}`
+//   );
+//   const html = response.data;
+//   const $ = load(html);
+//   const companies: { companyUrl: string; companyName: string }[] = [];
+
+//   // Each company card is a div with class 'mb-6 w-full rounded border border-gray-400 bg-white'
+//   $(".mb-6.w-full.rounded.border.border-gray-400.bg-white").each((i, el) => {
+//     // Find the company link inside the card
+//     const companyLink = $(el)
+//       .find('[data-testid="startup-header"] a.content-center')
+//       .attr("href");
+//     const companyName = $(el)
+//       .find('[data-testid="startup-header"] h2')
+//       .text()
+//       .trim();
+//     if (companyLink && companyName) {
+//       companies.push({
+//         companyUrl: companyLink,
+//         companyName,
+//       });
+//     }
+//   });
+
+//   console.log(companies);
+// }

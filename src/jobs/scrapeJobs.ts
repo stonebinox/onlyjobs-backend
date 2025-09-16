@@ -11,6 +11,7 @@ import {
   scrapeNearJobs,
   scrapeCryptoJobsList,
   scrapeWeb3CareerJobs,
+  // scrapeWellfound,
 } from "./scrapers";
 import { ScrapedJob } from "./scrapers";
 
@@ -55,6 +56,11 @@ export async function runDailyJobScraping(): Promise<void> {
     // https://javascript.jobs/remote
 
     const sources = [
+      // {
+      //   name: "Wellfound",
+      //   url: "https://wellfound.com/remote",
+      //   scraper: scrapeWellfound,
+      // },
       {
         name: "Web3 Careers",
         url: "https://web3.career/remote-jobs",
@@ -189,7 +195,7 @@ export async function runDailyJobScraping(): Promise<void> {
         name: "Landing.jobs",
         url: "https://landing.jobs/jobs",
         scraper: scrapeLandingJobs,
-      }, 
+      },
     ];
 
     for (const source of sources) {
