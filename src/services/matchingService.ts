@@ -107,9 +107,11 @@ export const getMatchesData = async (
   });
 
   const populatedMatches = await Promise.all(matchPromises);
-  const sortedMatches = populatedMatches.sort(
-    (a, b) => b.matchScore - a.matchScore
-  );
+  const sortedMatches = populatedMatches.sort((a, b) => {
+    const dateA = a.job?.createdAt ? new Date(a.job.createdAt).getTime() : 0;
+    const dateB = b.job?.createdAt ? new Date(b.job.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return sortedMatches;
 };
