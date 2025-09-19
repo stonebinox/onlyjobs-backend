@@ -91,10 +91,13 @@ export const getMatchesData = async (
   userId: string,
   minMatchScore: number = 0
 ) => {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const matches = await MatchRecord.find({
     userId,
     matchScore: { $gte: minMatchScore },
-  });
+    createdAt: { $gte: thirtyDaysAgo },
+  }).sort({ createdAt: -1 });
 
   const matchPromises = matches.map(async (match) => {
     const job = await JobListing.findById(match.jobId);
@@ -107,11 +110,9 @@ export const getMatchesData = async (
   });
 
   const populatedMatches = await Promise.all(matchPromises);
-  const sortedMatches = populatedMatches.sort((a, b) => {
-    const dateA = a.job?.createdAt ? new Date(a.job.createdAt).getTime() : 0;
-    const dateB = b.job?.createdAt ? new Date(b.job.createdAt).getTime() : 0;
-    return dateB - dateA;
-  });
+  const sortedMatches = populatedMatches.sort(
+    (a, b) => b.matchScore - a.matchScore
+  );
 
   return sortedMatches;
 };
