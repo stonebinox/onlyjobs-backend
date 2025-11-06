@@ -13,18 +13,18 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
     let users;
 
     if (userId) {
-      users = await User.findOne({ _id: userId });
+      users = await User.findOne({ _id: userId, isVerified: true });
       console.log(`Running matching for specific user: ${userId}`);
 
       if (!users) {
-        console.log(`No user found with email: ${userId}`);
+        console.log(`No verified user found with id: ${userId}`);
         return;
       }
 
       users = [users]; // Wrap in an array for consistency
     } else {
-      users = await User.find(); // todo: we should match only based on whether they're verified
-      console.log(`Found ${users.length} users to match with jobs`);
+      users = await User.find({ isVerified: true });
+      console.log(`Found ${users.length} verified users to match with jobs`);
     }
 
     // Get jobs from the past month
