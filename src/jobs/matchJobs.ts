@@ -1,6 +1,7 @@
 import User from "../models/User";
 import JobListing from "../models/JobListing";
 import MatchRecord from "../models/MatchRecord";
+import Transaction from "../models/Transaction";
 import { matchUserToJob } from "../services/matchingService";
 import { filterJobsForUser } from "../utils/filterJobsForUser";
 
@@ -41,11 +42,23 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
     for (const user of users) {
       console.log(`Processing matches for user: ${user.email}`);
 
+      // Check wallet balance before processing
+      const walletBalance = user.walletBalance || 0;
+      if (walletBalance < 0.3) {
+        console.log(
+          `Skipping user ${user.email} - Insufficient wallet balance: $${walletBalance.toFixed(2)}`
+        );
+        continue;
+      }
+
       const eligibleJobs = filterJobsForUser(recentJobs, user);
       const existingMatches = await MatchRecord.find({ userId: user._id });
       const matchedJobIds = new Set(
         existingMatches.map((match) => match.jobId.toString())
       );
+
+      let matchFound = false;
+      const matchRecords = [];
 
       for (const job of eligibleJobs) {
         if (matchedJobIds.has(job.id.toString())) {
@@ -73,7 +86,8 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
           continue;
         }
 
-        await MatchRecord.create({
+        matchFound = true;
+        matchRecords.push({
           userId: user._id,
           jobId: job._id,
           matchScore: matchResult.matchScore,
@@ -86,6 +100,40 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
         console.log(
           `Created match for ${user.email} with job ${job.title} - Score: ${matchResult.matchScore}`
         );
+      }
+
+      // If at least one match was found, deduct $0.30 from wallet
+      if (matchFound) {
+        // Create all match records
+        await MatchRecord.insertMany(matchRecords);
+
+        // Deduct from wallet
+        const updatedUser = await User.findById(user._id);
+        if (updatedUser) {
+          updatedUser.walletBalance = Math.max(0, (updatedUser.walletBalance || 0) - 0.3);
+          await updatedUser.save();
+
+          // Create transaction record for deduction
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const description = `Job matching fee - ${today.toLocaleDateString()}`;
+
+          await Transaction.create({
+            userId: user._id,
+            type: "debit",
+            amount: 0.3,
+            description,
+            status: "completed",
+            metadata: {
+              matchesFound: matchRecords.length,
+              deductionDate: today,
+            },
+          });
+
+          console.log(
+            `Deducted $0.30 from ${user.email}'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
+          );
+        }
       }
     }
 

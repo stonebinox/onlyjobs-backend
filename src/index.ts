@@ -8,6 +8,7 @@ import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import devRoutes from "./routes/devRoutes";
 import matchRoutes from "./routes/matchRoutes";
+import walletRoutes from "./routes/walletRoutes";
 import runDailyJobScraping from "./jobs/scrapeJobs";
 import runDailyJobMatching from "./jobs/matchJobs";
 
@@ -37,6 +38,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/matches", matchRoutes);
+app.use("/api/wallet", walletRoutes);
 
 // Basic health check route
 app.get("/healthcheck", (req, res) => {

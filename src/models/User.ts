@@ -30,6 +30,7 @@ export interface IUser extends Document {
   updatedAt: Date;
   isVerified: boolean; // New field for email verification status
   qna: AnsweredQuestion[];
+  walletBalance: number; // Wallet balance in USD
 }
 
 const UserSchema: Schema = new Schema(
@@ -67,6 +68,7 @@ const UserSchema: Schema = new Schema(
         skipped: { type: Boolean, default: false },
       },
     ],
+    walletBalance: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
