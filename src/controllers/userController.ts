@@ -425,9 +425,71 @@ export const createAnswer = asyncHandler(
 // @access  Private
 export const updateUserProfile = asyncHandler(
   async (req: Request, res: Response) => {
-    // TODO: Implement update profile logic
-    res.json({
-      message: "User profile updated",
+    const userId = req.user?.id;
+    const { resume } = req.body;
+
+    if (!resume || typeof resume !== "object") {
+      res.status(400);
+      throw new Error("Please provide valid resume data");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    // Merge resume updates with existing resume data
+    const updatedResume = {
+      ...user.resume.toObject(),
+      ...resume,
+    };
+
+    // Validate array fields are arrays
+    const arrayFields = [
+      "skills",
+      "experience",
+      "education",
+      "projects",
+      "certifications",
+      "languages",
+      "achievements",
+      "volunteerExperience",
+      "interests",
+    ];
+
+    for (const field of arrayFields) {
+      if (resume[field] !== undefined) {
+        if (!Array.isArray(resume[field])) {
+          res.status(400);
+          throw new Error(`${field} must be an array`);
+        }
+        updatedResume[field] = resume[field];
+      }
+    }
+
+    // Validate summary is a string if provided
+    if (resume.summary !== undefined && typeof resume.summary !== "string") {
+      res.status(400);
+      throw new Error("summary must be a string");
+    }
+
+    // Update user with merged resume data
+    user.resume = updatedResume as any;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        preferences: user.preferences,
+        resume: user.resume,
+        createdAt: user.createdAt,
+      },
     });
   }
 );
@@ -626,6 +688,50 @@ export const deleteUserAccount = asyncHandler(
 
     res.status(200).json({
       message: "User account deleted successfully",
+    });
+  }
+);
+
+// @desc    Search existing skills across all users
+// @route   GET /api/users/skills/search?q=query
+// @access  Private
+export const searchSkills = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = req.query.q as string;
+
+    if (!query || query.trim().length < 2) {
+      res.status(200).json({
+        skills: [],
+      });
+      return;
+    }
+
+    const searchTerm = query.trim().toLowerCase();
+
+    // Get all users and extract unique skills
+    const users = await User.find({
+      "resume.skills": { $exists: true, $ne: [] },
+    }).select("resume.skills");
+
+    // Extract all skills and normalize them (remove ratings for matching)
+    const skillSet = new Set<string>();
+    users.forEach((user) => {
+      if (user.resume?.skills) {
+        user.resume.skills.forEach((skill: string) => {
+          // Extract skill name without rating: "JavaScript (8)" -> "JavaScript"
+          const skillName = skill.replace(/\s*\(\d+\/10\)\s*$/, "").trim();
+          if (skillName.toLowerCase().includes(searchTerm)) {
+            skillSet.add(skillName);
+          }
+        });
+      }
+    });
+
+    // Convert to array and sort
+    const skills = Array.from(skillSet).sort();
+
+    res.status(200).json({
+      skills: skills.slice(0, 10), // Limit to 10 results
     });
   }
 );

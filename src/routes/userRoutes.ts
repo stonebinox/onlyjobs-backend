@@ -18,6 +18,7 @@ import {
   updateMinMatchScore,
   factoryResetUserAccount,
   deleteUserAccount,
+  searchSkills,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -32,6 +33,7 @@ router.post("/auth", authenticateUser);
 // Protected routes
 router.get("/username", protect, getUserName);
 router.get("/active-count", protect, getActiveUserCount);
+router.get("/skills/search", protect, searchSkills);
 router.put("/profile", protect, updateUserProfile);
 router.get("/profile", protect, getUserProfile);
 router.post("/cv", protect, upload.single("file"), updateUserCV);
