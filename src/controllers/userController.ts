@@ -6,7 +6,7 @@ import fs from "fs";
 import { tmpdir } from "os";
 import { v4 as uuidv4 } from "uuid";
 
-import User from "../models/User";
+import User, { IUser } from "../models/User";
 import {
   answerQuestion,
   findUserByEmail,
@@ -133,27 +133,6 @@ export const updateUserCV = asyncHandler(
       const filePath = path.join(uploadDir, fileName);
       fs.writeFileSync(filePath, file.buffer);
       const parsedCV = await parseUserCV(filePath);
-
-      const updatePayload: any = {
-        resume: parsedCV.resume,
-      };
-
-      if (parsedCV.name) {
-        updatePayload.name = parsedCV.name;
-      }
-
-      if (parsedCV.location) {
-        updatePayload["preferences.location"] = [parsedCV.location];
-        updatePayload["preferences.remoteOnly"] =
-          parsedCV.location.toLowerCase() === "remote";
-      }
-
-      if (parsedCV.preferences) {
-        updatePayload.preferences = {
-          ...updatePayload.preferences,
-          ...parsedCV.preferences,
-        };
-      }
 
       const updatedUser = await User.findByIdAndUpdate(
         userId,
@@ -442,7 +421,7 @@ export const updateUserProfile = asyncHandler(
 
     // Merge resume updates with existing resume data
     const updatedResume = {
-      ...user.resume.toObject(),
+      ...user.resume,
       ...resume,
     };
 
@@ -476,7 +455,7 @@ export const updateUserProfile = asyncHandler(
     }
 
     // Update user with merged resume data
-    user.resume = updatedResume as any;
+    user.resume = updatedResume as IUser["resume"];
     await user.save();
 
     res.status(200).json({
