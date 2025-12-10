@@ -116,7 +116,13 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
           // Create transaction record for deduction
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const description = `Job matching fee - ${today.toLocaleDateString()}`;
+          // Format date as "Dec 10, 2025" to match frontend display format
+          const formattedDate = today.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+          const description = `Job matching fee - ${formattedDate}`;
 
           await Transaction.create({
             userId: user._id,
