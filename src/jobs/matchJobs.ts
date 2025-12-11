@@ -3,6 +3,10 @@ import JobListing from "../models/JobListing";
 import MatchRecord from "../models/MatchRecord";
 import Transaction from "../models/Transaction";
 import { matchUserToJob } from "../services/matchingService";
+import {
+  MatchSummaryItem,
+  sendMatchSummaryEmail,
+} from "../services/emailService";
 import { filterJobsForUser } from "../utils/filterJobsForUser";
 
 export async function runDailyJobMatching(userId?: string): Promise<void> {
@@ -59,6 +63,7 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
 
       let matchFound = false;
       const matchRecords = [];
+      const emailMatches: MatchSummaryItem[] = [];
 
       for (const job of eligibleJobs) {
         if (matchedJobIds.has(job.id.toString())) {
@@ -95,6 +100,14 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
           reasoning: matchResult.reasoning,
           freshness: matchResult.freshness,
           clicked: false,
+        });
+
+        emailMatches.push({
+          title: job.title,
+          company: job.company,
+          url: job.url,
+          matchScore: matchResult.matchScore,
+          freshness: matchResult.freshness,
         });
 
         console.log(
@@ -139,6 +152,13 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
           console.log(
             `Deducted $0.30 from ${user.email}'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
           );
+        }
+
+        // Send match summary email (non-blocking for the matching flow)
+        try {
+          await sendMatchSummaryEmail(user, emailMatches, 0.3);
+        } catch (err) {
+          console.error(`Failed to send match email for ${user.email}`, err);
         }
       }
     }
