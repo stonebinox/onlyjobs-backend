@@ -178,11 +178,16 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
         }
 
         // Send match summary email (non-blocking for the matching flow)
-        // Only send if we actually charged (or if this is a retry after charge)
+        console.log(`[EMAIL] Preparing to send match summary email to ${user.email} with ${emailMatches.length} matches`);
         try {
-          await sendMatchSummaryEmail(user, emailMatches, 0.3);
+          const emailSent = await sendMatchSummaryEmail(user, emailMatches, 0.3);
+          if (emailSent) {
+            console.log(`[EMAIL] ✓ Email notification sent successfully to ${user.email}`);
+          } else {
+            console.log(`[EMAIL] ✗ Email notification was not sent to ${user.email} (check logs above for reason)`);
+          }
         } catch (err) {
-          console.error(`Failed to send match email for ${user.email}`, err);
+          console.error(`[EMAIL] ✗ Exception while sending email to ${user.email}:`, err);
         }
       }
     }

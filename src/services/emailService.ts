@@ -11,19 +11,19 @@ export interface MatchSummaryItem {
   freshness: Freshness;
 }
 
-const FROM_EMAIL = process.env.RESEND_FROM || "onlyjobs <onboarding@resend.dev>";
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-
 let resendClient: Resend | null = null;
 
 const ensureConfigured = () => {
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
   if (!RESEND_API_KEY) {
-    console.error("Resend API key missing: set RESEND_API_KEY");
+    console.error("[EMAIL] Resend API key missing: set RESEND_API_KEY environment variable");
     return false;
   }
 
   if (!resendClient) {
     resendClient = new Resend(RESEND_API_KEY);
+    console.log("[EMAIL] Resend client initialized");
   }
   return true;
 };
@@ -33,40 +33,60 @@ export const sendMatchSummaryEmail = async (
   matches: MatchSummaryItem[],
   chargeAmount: number
 ): Promise<boolean> => {
-  if (!ensureConfigured()) return false;
+  console.log(`[EMAIL] Attempting to send match summary to ${user.email} with ${matches.length} matches`);
+  
+  if (!ensureConfigured()) {
+    console.error(`[EMAIL] Skipping email to ${user.email} - Resend not configured`);
+    return false;
+  }
+  
   if (!user.email) {
-    console.error("Cannot send email: user email missing");
+    console.error(`[EMAIL] Skipping email - user email missing for user ${user._id}`);
     return false;
   }
 
   if (!matches.length) {
-    console.log(`No matches to email for user ${user.email}`);
+    console.log(`[EMAIL] Skipping email to ${user.email} - no matches to send`);
     return false;
   }
 
-  const topMatches = [...matches]
-    .sort((a, b) => b.matchScore - a.matchScore)
-    .slice(0, 5);
+  const sortedMatches = [...matches].sort((a, b) => b.matchScore - a.matchScore);
+  // Show top 3 matches, or all matches if there are 3 or fewer
+  const topMatches = sortedMatches.slice(0, 3);
+  const remainingCount = matches.length - topMatches.length;
 
   const listItems = topMatches
     .map(
       (match) =>
         `<li><strong>${match.title}</strong> at ${match.company} — score ${Math.round(
           match.matchScore
-        )}/100 (${match.freshness})${match.url ? ` — <a href="${match.url}">View</a>` : ""}</li>`
+        )}/100 (${match.freshness})</li>`
     )
     .join("");
 
-  const subject = `You have ${matches.length} new matches on onlyjobs`;
+  // Only show "more matches" text if there are actually more than what we're displaying
+  const moreMatchesText = remainingCount > 0 
+    ? `<p style="margin-top:12px;"><strong>Plus ${remainingCount} more match${remainingCount === 1 ? '' : 'es'} waiting for you in your dashboard!</strong></p>`
+    : '';
+
+  // Get frontend URL for dashboard link
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.com";
+  const dashboardUrl = `${frontendUrl}/dashboard`;
+
+  const subject = `You have ${matches.length} new match${matches.length === 1 ? '' : 'es'} on onlyjobs`;
   const html = `
     <div style="font-family: Arial, sans-serif; color: #1f2937;">
-      <h2 style="color:#111827;">Good news! We found ${matches.length} new matches for you</h2>
+      <h2 style="color:#111827;">Good news! We found ${matches.length} new match${matches.length === 1 ? '' : 'es'} for you</h2>
       <p>We ran your preferences and answers against new roles and found fresh opportunities.</p>
       <ul>${listItems}</ul>
+      ${moreMatchesText}
       <p style="margin-top:12px;">We applied your daily matching fee of $${chargeAmount.toFixed(
         2
       )}. Your updated wallet balance is visible in your dashboard.</p>
-      <p style="margin-top:12px;">Jump back in to review details, save your favorites, or skip roles you’re not interested in.</p>
+      <div style="margin-top:24px; text-align:center;">
+        <a href="${dashboardUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Your Matches</a>
+      </div>
+      <p style="margin-top:24px; color:#6b7280; font-size:14px;">Jump back in to review details, save your favorites, or skip roles you're not interested in.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
     </div>
   `;
@@ -76,16 +96,24 @@ export const sendMatchSummaryEmail = async (
       throw new Error("Resend client not initialized");
     }
 
-    await resendClient.emails.send({
+    const FROM_EMAIL = process.env.RESEND_FROM || "onlyjobs <onboarding@resend.dev>";
+
+    console.log(`[EMAIL] Sending email to ${user.email} from ${FROM_EMAIL}`);
+    const result = await resendClient.emails.send({
       from: FROM_EMAIL,
       to: user.email,
       subject,
       html,
     });
-    console.log(`Sent match summary email to ${user.email}`);
+    
+    console.log(`[EMAIL] ✓ Successfully sent match summary email to ${user.email} (ID: ${result.data?.id || 'unknown'})`);
     return true;
-  } catch (err) {
-    console.error("Failed to send match summary email", err);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    console.error(`[EMAIL] ✗ Failed to send match summary email to ${user.email}:`, err?.message || err);
+    if (err?.response?.body) {
+      console.error(`[EMAIL] Resend error details:`, JSON.stringify(err.response.body, null, 2));
+    }
     return false;
   }
 };
