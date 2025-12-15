@@ -894,6 +894,7 @@ export const factoryResetUserAccount = asyncHandler(
       minSalary: 0,
       industries: [],
       minScore: 30,
+      matchingEnabled: true,
     };
     user.skippedJobs = [];
     user.qna = [];
