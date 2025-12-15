@@ -55,6 +55,25 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
         continue;
       }
 
+      // Check if user has already been charged today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const existingChargeToday = await Transaction.findOne({
+        userId: user._id,
+        type: "debit",
+        amount: 0.3,
+        status: "completed",
+        createdAt: {
+          $gte: today,
+          $lt: tomorrow,
+        },
+      });
+
+      const alreadyChargedToday = !!existingChargeToday;
+
       const eligibleJobs = filterJobsForUser(recentJobs, user);
       const existingMatches = await MatchRecord.find({ userId: user._id });
       const matchedJobIds = new Set(
@@ -115,46 +134,51 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
         );
       }
 
-      // If at least one match was found, deduct $0.30 from wallet
+      // If at least one match was found, create match records
       if (matchFound) {
         // Create all match records
         await MatchRecord.insertMany(matchRecords);
 
-        // Deduct from wallet
-        const updatedUser = await User.findById(user._id);
-        if (updatedUser) {
-          updatedUser.walletBalance = Math.max(0, (updatedUser.walletBalance || 0) - 0.3);
-          await updatedUser.save();
+        // Only charge if we haven't charged today yet
+        if (!alreadyChargedToday) {
+          // Deduct from wallet
+          const updatedUser = await User.findById(user._id);
+          if (updatedUser) {
+            updatedUser.walletBalance = Math.max(0, (updatedUser.walletBalance || 0) - 0.3);
+            await updatedUser.save();
 
-          // Create transaction record for deduction
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          // Format date as "Dec 10, 2025" to match frontend display format
-          const formattedDate = today.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
-          const description = `Job matching fee - ${formattedDate}`;
+            // Format date as "Dec 10, 2025" to match frontend display format
+            const formattedDate = today.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+            const description = `Job matching fee - ${formattedDate}`;
 
-          await Transaction.create({
-            userId: user._id,
-            type: "debit",
-            amount: 0.3,
-            description,
-            status: "completed",
-            metadata: {
-              matchesFound: matchRecords.length,
-              deductionDate: today,
-            },
-          });
+            await Transaction.create({
+              userId: user._id,
+              type: "debit",
+              amount: 0.3,
+              description,
+              status: "completed",
+              metadata: {
+                matchesFound: matchRecords.length,
+                deductionDate: today,
+              },
+            });
 
+            console.log(
+              `Deducted $0.30 from ${user.email}'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
+            );
+          }
+        } else {
           console.log(
-            `Deducted $0.30 from ${user.email}'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
+            `Skipping charge for ${user.email} - already charged today`
           );
         }
 
         // Send match summary email (non-blocking for the matching flow)
+        // Only send if we actually charged (or if this is a retry after charge)
         try {
           await sendMatchSummaryEmail(user, emailMatches, 0.3);
         } catch (err) {

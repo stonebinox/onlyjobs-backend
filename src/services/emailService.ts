@@ -1,4 +1,4 @@
-import sgMail from "@sendgrid/mail";
+import { Resend } from "resend";
 
 import { IUser } from "../models/User";
 import { Freshness } from "../models/MatchRecord";
@@ -11,16 +11,20 @@ export interface MatchSummaryItem {
   freshness: Freshness;
 }
 
-const FROM_EMAIL = process.env.SENDGRID_FROM || "onlyjobs <no-reply@onlyjobs.com>";
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_EMAIL = process.env.RESEND_FROM || "onlyjobs <onboarding@resend.dev>";
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+let resendClient: Resend | null = null;
 
 const ensureConfigured = () => {
-  if (!SENDGRID_API_KEY) {
-    console.error("SendGrid API key missing: set SENDGRID_API_KEY");
+  if (!RESEND_API_KEY) {
+    console.error("Resend API key missing: set RESEND_API_KEY");
     return false;
   }
 
-  sgMail.setApiKey(SENDGRID_API_KEY);
+  if (!resendClient) {
+    resendClient = new Resend(RESEND_API_KEY);
+  }
   return true;
 };
 
@@ -68,9 +72,13 @@ export const sendMatchSummaryEmail = async (
   `;
 
   try {
-    await sgMail.send({
-      to: user.email,
+    if (!resendClient) {
+      throw new Error("Resend client not initialized");
+    }
+
+    await resendClient.emails.send({
       from: FROM_EMAIL,
+      to: user.email,
       subject,
       html,
     });
