@@ -35,6 +35,7 @@ export interface IUser extends Document {
   pendingEmail?: string;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
+  lastLoginAt?: Date;
 }
 
 const UserSchema: Schema = new Schema(
@@ -77,6 +78,7 @@ const UserSchema: Schema = new Schema(
     pendingEmail: { type: String },
     emailVerificationToken: { type: String },
     emailVerificationExpires: { type: Date },
+    lastLoginAt: { type: Date },
   },
   { timestamps: true }
 );

@@ -67,6 +67,7 @@ export const authenticateUser = asyncHandler(
       user = await User.create({
         email,
         password: encryptedPassword,
+        lastLoginAt: new Date(),
       });
       // TODO: send verification email when we integrate email service
     } else {
@@ -77,6 +78,10 @@ export const authenticateUser = asyncHandler(
         res.status(401);
         throw new Error("Invalid email or password");
       }
+
+      // Update last login timestamp
+      user.lastLoginAt = new Date();
+      await user.save();
     }
 
     // we generate a token

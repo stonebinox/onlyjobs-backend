@@ -6,6 +6,7 @@ import {
   getMatchesData,
   markMatchAsClicked,
   skipMatch,
+  markMatchAppliedStatus,
 } from "../services/matchingService";
 
 // @desc    Get user's job matches
@@ -82,5 +83,28 @@ export const markMatchAsSkipped = expressAsyncHandler(
     await skipMatch(matchId);
 
     res.json({ message: "Match marked as skipped" });
+  }
+);
+
+// @desc    Mark a match as applied or not applied
+// @route   POST /api/matches/applied
+// @access  Private
+export const markMatchApplied = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { matchId, applied } = req.body;
+
+    if (!matchId) {
+      res.status(400);
+      throw new Error("Match ID is required");
+    }
+
+    if (typeof applied !== "boolean") {
+      res.status(400);
+      throw new Error("Applied status must be a boolean");
+    }
+
+    await markMatchAppliedStatus(matchId, applied);
+
+    res.json({ message: "Match applied status updated" });
   }
 );

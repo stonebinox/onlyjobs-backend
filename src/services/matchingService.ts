@@ -140,6 +140,20 @@ export const skipMatch = async (matchId: string) => {
   return true;
 };
 
+export const markMatchAppliedStatus = async (
+  matchId: string,
+  applied: boolean
+) => {
+  const match = await MatchRecord.findById(matchId);
+
+  if (!match) throw new Error("Match not found");
+
+  match.applied = applied;
+  await match.save();
+
+  return true;
+};
+
 export const deleteAllMatches = async (userId: string) => {
   const result = await MatchRecord.deleteMany({ userId });
 

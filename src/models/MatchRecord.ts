@@ -17,6 +17,7 @@ export interface IMatchRecord extends Document {
   createdAt: Date;
   updatedAt: Date;
   skipped: boolean;
+  applied: boolean | null;
 }
 
 const MatchRecordSchema: Schema = new Schema(
@@ -33,6 +34,7 @@ const MatchRecordSchema: Schema = new Schema(
     },
     clicked: { type: Boolean, default: false },
     skipped: { type: Boolean, default: false },
+    applied: { type: Boolean, default: null },
   },
   { timestamps: true }
 );
