@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import { tmpdir } from "os";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
 import User, { IUser } from "../models/User";
 import {
@@ -23,8 +24,24 @@ import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { deleteAllMatches } from "../services/matchingService";
 import MatchRecord from "../models/MatchRecord";
 import JobListing, { IJobListing } from "../models/JobListing";
+import {
+  sendEmailChangeVerificationEmail,
+  sendMatchingEnabledEmail,
+  sendMatchingDisabledEmail,
+} from "../services/emailService";
 
 const saltRounds = 10;
+
+const validateStringArray = (fieldName: string, value: unknown) => {
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} must be an array of strings`);
+  }
+
+  const allStrings = value.every((item) => typeof item === "string");
+  if (!allStrings) {
+    throw new Error(`${fieldName} must be an array of strings`);
+  }
+};
 
 export const authenticateUser = asyncHandler(
   async (req: Request, res: Response) => {
@@ -600,6 +617,242 @@ export const updateMinMatchScore = asyncHandler(
 
     res.status(200).json({
       message: "Minimum match score updated successfully",
+    });
+  }
+);
+
+// @desc    Update user preferences (location, remoteOnly, minSalary, jobTypes, industries, minScore)
+// @route   PUT /api/users/preferences
+// @access  Private
+export const updatePreferences = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const {
+      location,
+      remoteOnly,
+      minSalary,
+      jobTypes,
+      industries,
+      minScore,
+    } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    try {
+      if (location !== undefined) {
+        validateStringArray("location", location);
+        user.preferences.location = location;
+      }
+
+      if (remoteOnly !== undefined) {
+        if (typeof remoteOnly !== "boolean") {
+          res.status(400);
+          throw new Error("remoteOnly must be a boolean");
+        }
+        user.preferences.remoteOnly = remoteOnly;
+      }
+
+      if (minSalary !== undefined) {
+        const parsedMinSalary = Number(minSalary);
+        if (Number.isNaN(parsedMinSalary) || parsedMinSalary < 0) {
+          res.status(400);
+          throw new Error("minSalary must be a non-negative number");
+        }
+        user.preferences.minSalary = parsedMinSalary;
+      }
+
+      if (jobTypes !== undefined) {
+        validateStringArray("jobTypes", jobTypes);
+        user.preferences.jobTypes = jobTypes;
+      }
+
+      if (industries !== undefined) {
+        validateStringArray("industries", industries);
+        user.preferences.industries = industries;
+      }
+
+      if (minScore !== undefined) {
+        const parsedMinScore = Number(minScore);
+        if (
+          Number.isNaN(parsedMinScore) ||
+          parsedMinScore < 0 ||
+          parsedMinScore > 100
+        ) {
+          res.status(400);
+          throw new Error("minScore must be between 0 and 100");
+        }
+        user.preferences.minScore = parsedMinScore;
+      }
+
+      if (req.body.matchingEnabled !== undefined) {
+        if (typeof req.body.matchingEnabled !== "boolean") {
+          res.status(400);
+          throw new Error("matchingEnabled must be a boolean");
+        }
+        const previousMatchingEnabled = user.preferences.matchingEnabled ?? true;
+        const newMatchingEnabled = req.body.matchingEnabled;
+        
+        user.preferences.matchingEnabled = newMatchingEnabled;
+        
+        // Send email if matching status changed
+        if (previousMatchingEnabled !== newMatchingEnabled) {
+          // Reload user after save to get fresh data, then send email
+          await user.save();
+          const updatedUser = await User.findById(userId);
+          if (updatedUser) {
+            if (newMatchingEnabled) {
+              // Matching enabled - send welcome back email
+              try {
+                await sendMatchingEnabledEmail(updatedUser);
+              } catch (err) {
+                console.error("Failed to send matching enabled email", err);
+                // Don't fail the request if email fails
+              }
+            } else {
+              // Matching disabled - send confirmation email
+              try {
+                await sendMatchingDisabledEmail(updatedUser);
+              } catch (err) {
+                console.error("Failed to send matching disabled email", err);
+                // Don't fail the request if email fails
+              }
+            }
+          }
+        } else {
+          await user.save();
+        }
+      } else {
+        await user.save();
+      }
+
+      // Reload user to get latest state
+      const finalUser = await User.findById(userId);
+      if (!finalUser) {
+        res.status(404);
+        throw new Error("User not found");
+      }
+
+      res.status(200).json({
+        message: "Preferences updated successfully",
+        preferences: finalUser.preferences,
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Invalid preferences payload");
+    }
+  }
+);
+
+// @desc    Request email change (sends verification to new email)
+// @route   POST /api/users/email-change/request
+// @access  Private
+export const requestEmailChange = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { newEmail } = req.body;
+
+    if (!newEmail || typeof newEmail !== "string" || newEmail.trim() === "") {
+      res.status(400);
+      throw new Error("Please provide a valid new email");
+    }
+
+    const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+    // Check if another account already uses this email (active or pending)
+    const existingUser = await User.findOne({
+      $or: [{ email: normalizedNewEmail }, { pendingEmail: normalizedNewEmail }],
+    });
+    if (existingUser) {
+      res.status(409);
+      throw new Error("Another account already uses this email");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
+    user.pendingEmail = normalizedNewEmail;
+    user.emailVerificationToken = token;
+    user.emailVerificationExpires = expires;
+
+    await user.save();
+
+    await sendEmailChangeVerificationEmail(user.email, normalizedNewEmail, token);
+
+    res.status(200).json({
+      message: "Verification email sent to the new address. Please verify to complete the change.",
+      shouldLogout: true,
+    });
+  }
+);
+
+// @desc    Verify email change (one-time token)
+// @route   POST /api/users/email-change/verify
+// @access  Public
+export const verifyEmailChange = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string") {
+      res.status(400);
+      throw new Error("Verification token is required");
+    }
+
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid or expired verification link");
+    }
+
+    // Ensure no other user took this email in the meantime
+    if (user.pendingEmail) {
+      const conflict = await User.findOne({
+        email: user.pendingEmail,
+        _id: { $ne: user._id },
+      });
+      if (conflict) {
+        // Clear pending fields to prevent reuse
+        user.pendingEmail = undefined;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+        await user.save();
+        res.status(409);
+        throw new Error("Another account already uses this email");
+      }
+    }
+
+    // Apply email change
+    if (!user.pendingEmail) {
+      res.status(400);
+      throw new Error("No pending email change found");
+    }
+
+    user.email = user.pendingEmail;
+    user.pendingEmail = undefined;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    user.isVerified = true;
+    await user.save();
+
+    res.status(200).json({
+      message: "Email updated successfully. Please sign in again.",
+      shouldLogout: true,
     });
   }
 );

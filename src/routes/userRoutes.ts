@@ -19,6 +19,9 @@ import {
   factoryResetUserAccount,
   deleteUserAccount,
   searchSkills,
+  updatePreferences,
+  requestEmailChange,
+  verifyEmailChange,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -49,8 +52,11 @@ router.get("/answers", protect, getAnsweredQuestions);
 router.post("/skip-question", protect, setSkippedQuestion);
 router.post("/create-answer", protect, createAnswer);
 router.put("/update-email", protect, updateUserEmailAddress);
+router.post("/email-change/request", protect, requestEmailChange);
+router.post("/email-change/verify", verifyEmailChange);
 router.put("/password", protect, updatePassword);
 router.put("/update-mini-score", protect, updateMinMatchScore);
+router.put("/preferences", protect, updatePreferences);
 router.post("/factory-reset", protect, factoryResetUserAccount);
 router.delete("/delete", protect, deleteUserAccount);
 

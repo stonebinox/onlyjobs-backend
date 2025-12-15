@@ -46,6 +46,11 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
     for (const user of users) {
       console.log(`Processing matches for user: ${user.email}`);
 
+      if (user.preferences?.matchingEnabled === false) {
+        console.log(`Skipping user ${user.email} - matching disabled by user`);
+        continue;
+      }
+
       // Check wallet balance before processing
       const walletBalance = user.walletBalance || 0;
       if (walletBalance < 0.3) {

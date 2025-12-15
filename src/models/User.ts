@@ -24,6 +24,7 @@ export interface IUser extends Document {
     minSalary: number;
     industries: string[];
     minScore: number;
+    matchingEnabled: boolean;
   };
   skippedJobs: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -31,6 +32,9 @@ export interface IUser extends Document {
   isVerified: boolean; // New field for email verification status
   qna: AnsweredQuestion[];
   walletBalance: number; // Wallet balance in USD
+  pendingEmail?: string;
+  emailVerificationToken?: string;
+  emailVerificationExpires?: Date;
 }
 
 const UserSchema: Schema = new Schema(
@@ -57,6 +61,7 @@ const UserSchema: Schema = new Schema(
       minSalary: { type: Number, default: 0 },
       industries: [String],
       minScore: { type: Number, default: 30 },
+      matchingEnabled: { type: Boolean, default: true },
     },
     skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
     isVerified: { type: Boolean, default: false },
@@ -69,6 +74,9 @@ const UserSchema: Schema = new Schema(
       },
     ],
     walletBalance: { type: Number, default: 0, min: 0 },
+    pendingEmail: { type: String },
+    emailVerificationToken: { type: String },
+    emailVerificationExpires: { type: Date },
   },
   { timestamps: true }
 );
