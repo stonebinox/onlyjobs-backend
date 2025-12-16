@@ -46,7 +46,7 @@ export const sendEmailChangeVerificationEmail = async (
   }
 
   const frontendUrl =
-    process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.com";
+    process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
   const verifyUrl = `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   const subject = "Confirm your new email address for onlyjobs";
@@ -113,7 +113,7 @@ export const sendMatchingEnabledEmail = async (user: IUser): Promise<boolean> =>
     return false;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.com";
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
   const dashboardUrl = `${frontendUrl}/dashboard`;
 
   const subject = "Welcome back! Job matching is now active";
@@ -173,7 +173,7 @@ export const sendMatchingDisabledEmail = async (user: IUser): Promise<boolean> =
     return false;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.com";
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
   const settingsUrl = `${frontendUrl}/settings`;
 
   const subject = "Job matching has been paused";
@@ -262,7 +262,7 @@ export const sendMatchSummaryEmail = async (
     : '';
 
   // Get frontend URL for dashboard link
-  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.com";
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
   const dashboardUrl = `${frontendUrl}/dashboard`;
 
   const subject = `You have ${matches.length} new match${matches.length === 1 ? '' : 'es'} on onlyjobs`;
