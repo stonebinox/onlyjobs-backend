@@ -11,6 +11,7 @@ import matchRoutes from "./routes/matchRoutes";
 import walletRoutes from "./routes/walletRoutes";
 import runDailyJobScraping from "./jobs/scrapeJobs";
 import runDailyJobMatching from "./jobs/matchJobs";
+import runTransactionCleanup from "./jobs/transactionCleanup";
 
 // Load environment variables
 dotenv.config();
@@ -58,6 +59,12 @@ cron.schedule("0 1 * * *", () => {
 // Run job matching every day at 3:00 AM
 cron.schedule("0 3 * * *", () => {
   runDailyJobMatching();
+});
+
+// Run stale transaction cleanup every 15 minutes
+// This ensures abandoned/failed payments are cleaned up promptly
+cron.schedule("*/15 * * * *", () => {
+  runTransactionCleanup();
 });
 
 // Error handler middleware

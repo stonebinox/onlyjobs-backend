@@ -97,4 +97,51 @@ export const verifyPayment = (
   }
 };
 
+/**
+ * Verify Razorpay webhook signature
+ * @param body Raw request body as string
+ * @param signature Webhook signature from header (x-razorpay-signature)
+ * @returns true if signature is valid, false otherwise
+ */
+export const verifyWebhookSignature = (
+  body: string,
+  signature: string
+): boolean => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error("RAZORPAY_WEBHOOK_SECRET not configured");
+      return false;
+    }
+
+    const generatedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(body)
+      .digest("hex");
+
+    return generatedSignature === signature;
+  } catch (error) {
+    console.error("Error verifying webhook signature:", error);
+    return false;
+  }
+};
+
+/**
+ * Fetch order details from Razorpay
+ * @param orderId Razorpay order ID
+ * @returns Order details or null if not found
+ */
+export const fetchOrder = async (
+  orderId: string
+): Promise<RazorpayOrderResponse | null> => {
+  try {
+    const razorpay = getRazorpayInstance();
+    const order = await razorpay.orders.fetch(orderId);
+    return order as RazorpayOrderResponse;
+  } catch (error) {
+    console.error("Error fetching Razorpay order:", error);
+    return null;
+  }
+};
+
 export default getRazorpayInstance;
