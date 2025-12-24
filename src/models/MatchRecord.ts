@@ -6,6 +6,12 @@ export enum Freshness {
   STALE = "Stale",
 }
 
+export interface MatchQnA {
+  question: string;
+  answer: string;
+  createdAt: Date;
+}
+
 export interface IMatchRecord extends Document {
   userId: mongoose.Types.ObjectId;
   jobId: mongoose.Types.ObjectId;
@@ -18,6 +24,7 @@ export interface IMatchRecord extends Document {
   updatedAt: Date;
   skipped: boolean;
   applied: boolean | null;
+  qna?: MatchQnA[];
 }
 
 const MatchRecordSchema: Schema = new Schema(
@@ -35,6 +42,16 @@ const MatchRecordSchema: Schema = new Schema(
     clicked: { type: Boolean, default: false },
     skipped: { type: Boolean, default: false },
     applied: { type: Boolean, default: null },
+    qna: {
+      type: [
+        {
+          question: { type: String, required: true },
+          answer: { type: String, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

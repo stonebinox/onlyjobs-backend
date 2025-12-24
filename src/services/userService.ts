@@ -273,7 +273,8 @@ export const skipQuestion = async (user: IUser, questionId: string) => {
 export const getAnswerForQuestion = async (
   user: IUser,
   question: string,
-  jobResult?: IJobListing | null
+  jobResult?: IJobListing | null,
+  matchRecordId?: string
 ) => {
   const answeredQuestions = await getUserQnA(user);
   const partialUserData = user.toObject();
@@ -295,6 +296,29 @@ export const getAnswerForQuestion = async (
     delete jobDetails.updatedAt;
   }
 
+  // Fetch previous Q&A for this specific match if matchRecordId is provided
+  let matchQnAHistory: Array<{ question: string; answer: string }> = [];
+  if (matchRecordId) {
+    const MatchRecord = (await import("../models/MatchRecord")).default;
+    const matchRecord = await MatchRecord.findById(matchRecordId).lean();
+
+    if (matchRecord && matchRecord.qna && matchRecord.qna.length > 0) {
+      // Sort by creation date (newest first) and get last 10 for context
+      const sortedQnA = [...matchRecord.qna]
+        .sort((a, b) => {
+          const dateA = a.createdAt || new Date(0);
+          const dateB = b.createdAt || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        })
+        .slice(0, 10);
+
+      matchQnAHistory = sortedQnA.map((qa) => ({
+        question: qa.question,
+        answer: qa.answer,
+      }));
+    }
+  }
+
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
@@ -306,12 +330,17 @@ export const getAnswerForQuestion = async (
           content: getAnswerComposerInstructions(
             answeredQuestions,
             partialUserData,
-            jobResult
+            jobResult,
+            matchQnAHistory
           ),
         },
         {
           role: "user",
-          content: `Here's a new question:\n\n${question}\n\nPlease generate an answer that matches the tone and style of the user's past answers.`,
+          content: `Here's a new question:\n\n${question}\n\nPlease generate an answer that matches the tone and style of the user's past answers.${
+            matchQnAHistory.length > 0
+              ? "\n\nIMPORTANT: This question may be related to previous questions asked for this same job application. Review the previous Q&A history below to ensure consistency and avoid repetition. If the question is similar to a previous one, you can reference or build upon the previous answer while still directly addressing the new question."
+              : ""
+          }`,
         },
       ],
     });

@@ -6,7 +6,8 @@ import { Question } from "../types/Question";
 export const getAnswerComposerInstructions = (
   answeredQuestions: (Question & Omit<AnsweredQuestion, "questionId">)[],
   userData: Partial<IUser>,
-  jobDetails?: IJobListing | null
+  jobDetails?: IJobListing | null,
+  matchQnAHistory?: Array<{ question: string; answer: string }>
 ) => `
 You are an AI assistant helping a user answer job application questions for a specific job position at a company. The user has previously answered several questions in their own style and tone. Your job is to generate a new answer that sounds natural, human, and consistent with their prior responses.
 
@@ -41,6 +42,19 @@ ${JSON.stringify(jobDetails, null, 2)}
 \`\`\`json
 ${JSON.stringify(answeredQuestions, null, 2)}
 \`\`\`
+
+${
+  matchQnAHistory && matchQnAHistory.length > 0
+    ? `
+## Previous Q&A for This Job Application
+These are questions and answers the user has already provided for THIS specific job application. Use these to ensure consistency, avoid repetition, and build upon previous answers when the new question is related.
+
+\`\`\`json
+${JSON.stringify(matchQnAHistory, null, 2)}
+\`\`\`
+`
+    : ""
+}
 
 ## User Data
 \`\`\`json

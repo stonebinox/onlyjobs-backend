@@ -382,6 +382,7 @@ export const createAnswer = asyncHandler(
     }
 
     let jobDetails = null;
+    let matchRecordId: string | null = null;
 
     if (req.body.jobResultId) {
       const jobResultId = req.body.jobResultId;
@@ -390,6 +391,7 @@ export const createAnswer = asyncHandler(
       if (!jobResult) {
         jobResult = null;
       } else {
+        matchRecordId = jobResultId;
         const jobId = jobResult.jobId;
         jobDetails = (await JobListing.findById(
           jobId.toString()
@@ -398,7 +400,12 @@ export const createAnswer = asyncHandler(
     }
 
     try {
-      const answer = await getAnswerForQuestion(user, question, jobDetails);
+      const answer = await getAnswerForQuestion(
+        user,
+        question,
+        jobDetails,
+        matchRecordId || undefined
+      );
 
       if (!answer) {
         res.status(200).json({
@@ -409,6 +416,23 @@ export const createAnswer = asyncHandler(
         return;
       }
 
+      // Save Q&A pair to database if matchRecordId is provided
+      if (matchRecordId) {
+        await MatchRecord.findByIdAndUpdate(
+          matchRecordId,
+          {
+            $push: {
+              qna: {
+                question: question.trim(),
+                answer,
+                createdAt: new Date(),
+              },
+            },
+          },
+          { new: true }
+        );
+      }
+
       res.status(200).json({
         success: true,
         answer,
@@ -417,6 +441,60 @@ export const createAnswer = asyncHandler(
       console.error("Error creating answer:", e);
       res.status(500);
       throw new Error("Error creating answer");
+    }
+  }
+);
+
+// @desc    Get Q&A history for a match
+// @route   GET /api/users/match-qna/:matchRecordId
+// @access  Private
+export const getMatchQnAHistory = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { matchRecordId } = req.params;
+
+    if (!matchRecordId) {
+      res.status(400);
+      throw new Error("Match record ID is required");
+    }
+
+    // Verify the match record belongs to the user
+    const matchRecord = await MatchRecord.findById(matchRecordId);
+
+    if (!matchRecord) {
+      res.status(404);
+      throw new Error("Match record not found");
+    }
+
+    if (matchRecord.userId.toString() !== userId) {
+      res.status(403);
+      throw new Error("Not authorized to access this match record");
+    }
+
+    try {
+      // Sort Q&A by creation date (newest first) and format for response
+      const qnaHistory = (matchRecord.qna || [])
+        .sort((a, b) => {
+          const dateA = a.createdAt || new Date(0);
+          const dateB = b.createdAt || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        })
+        .map((qa, index) => ({
+          _id: `qna-${index}`, // Generate a simple ID for frontend
+          question: qa.question,
+          answer: qa.answer,
+          createdAt: qa.createdAt || matchRecord.createdAt,
+          updatedAt: qa.createdAt || matchRecord.updatedAt,
+        }));
+
+      res.status(200).json({
+        success: true,
+        qnaHistory,
+      });
+    } catch (e) {
+      console.error("Error fetching Q&A history:", e);
+      res.status(500);
+      throw new Error("Error fetching Q&A history");
     }
   }
 );
