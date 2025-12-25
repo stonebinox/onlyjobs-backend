@@ -1,17 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import cron from "node-cron";
 
 import connectDB from "./utils/connectDB";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
-import devRoutes from "./routes/devRoutes";
 import matchRoutes from "./routes/matchRoutes";
 import walletRoutes from "./routes/walletRoutes";
-import runDailyJobScraping from "./jobs/scrapeJobs";
-import runDailyJobMatching from "./jobs/matchJobs";
-import runTransactionCleanup from "./jobs/transactionCleanup";
 
 // Load environment variables
 dotenv.config();
@@ -44,27 +39,6 @@ app.use("/api/wallet", walletRoutes);
 // Basic health check route
 app.get("/healthcheck", (req, res) => {
   res.send("API is running...");
-});
-
-if (process.env.NODE_ENV !== "production") {
-  app.use("/dev", devRoutes);
-}
-
-// Schedule cron jobs
-// Run job scraping every day at 1:00 AM
-cron.schedule("0 1 * * *", () => {
-  runDailyJobScraping();
-});
-
-// Run job matching every day at 3:00 AM
-cron.schedule("0 3 * * *", () => {
-  runDailyJobMatching();
-});
-
-// Run stale transaction cleanup every 15 minutes
-// This ensures abandoned/failed payments are cleaned up promptly
-cron.schedule("*/15 * * * *", () => {
-  runTransactionCleanup();
 });
 
 // Error handler middleware

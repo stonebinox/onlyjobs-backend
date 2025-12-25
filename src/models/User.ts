@@ -43,14 +43,15 @@ export interface IUser extends Document {
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
   lastLoginAt?: Date;
-  guideProgress?: {
-    [pageId: string]: {
+  guideProgress?: Map<
+    string,
+    {
       completed: boolean;
       completedAt?: Date;
       skipped: boolean;
       skippedAt?: Date;
-    };
-  };
+    }
+  >;
 }
 
 const UserSchema: Schema = new Schema(

@@ -17,7 +17,6 @@
   "dependencies": {
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
-    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -27,11 +26,8 @@
     "mongoose": "^8.13.2",
     "multer": "^1.4.5-lts.2",
     "node-cors": "^1.0.0",
-    "node-cron": "^3.0.3",
     "openai": "^5.12.2",
-    "p-limit": "^7.2.0",
     "pdf-parse": "^1.1.1",
-    "puppeteer": "^24.6.1",
     "razorpay": "^2.9.6",
     "resend": "^6.6.0",
     "uuid": "^11.1.0"
@@ -43,7 +39,6 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.14.0",
-    "@types/node-cron": "^3.0.11",
     "@types/pdf-parse": "^1.1.5",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
