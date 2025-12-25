@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 
 import User, { IUser } from "../models/User";
+import Transaction from "../models/Transaction";
 import {
   answerQuestion,
   findUserByEmail,
@@ -63,13 +64,26 @@ export const authenticateUser = asyncHandler(
     const encryptedPassword = await bcrypt.hash(password, saltRounds);
 
     if (!user) {
-      // we create the user
+      // we create the user with $2 welcome bonus
+      const WELCOME_BONUS = 2;
       user = await User.create({
         email,
         password: encryptedPassword,
         lastLoginAt: new Date(),
+        walletBalance: WELCOME_BONUS,
       });
-      // TODO: send verification email when we integrate email service
+
+      // Create a transaction record for the welcome bonus
+      await Transaction.create({
+        userId: user._id,
+        type: "credit",
+        amount: WELCOME_BONUS,
+        description: "Welcome bonus - free credits to get started",
+        status: "completed",
+        metadata: {
+          type: "welcome_bonus",
+        },
+      });
     } else {
       // we check if the password is correct
       const isMatch = await bcrypt.compare(password, user.password);
@@ -735,14 +749,8 @@ export const updateMinMatchScore = asyncHandler(
 export const updatePreferences = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const {
-      location,
-      remoteOnly,
-      minSalary,
-      jobTypes,
-      industries,
-      minScore,
-    } = req.body;
+    const { location, remoteOnly, minSalary, jobTypes, industries, minScore } =
+      req.body;
 
     const user = await User.findById(userId);
 
@@ -802,11 +810,12 @@ export const updatePreferences = asyncHandler(
           res.status(400);
           throw new Error("matchingEnabled must be a boolean");
         }
-        const previousMatchingEnabled = user.preferences.matchingEnabled ?? true;
+        const previousMatchingEnabled =
+          user.preferences.matchingEnabled ?? true;
         const newMatchingEnabled = req.body.matchingEnabled;
-        
+
         user.preferences.matchingEnabled = newMatchingEnabled;
-        
+
         // Send email if matching status changed
         if (previousMatchingEnabled !== newMatchingEnabled) {
           // Reload user after save to get fresh data, then send email
@@ -875,7 +884,10 @@ export const requestEmailChange = asyncHandler(
 
     // Check if another account already uses this email (active or pending)
     const existingUser = await User.findOne({
-      $or: [{ email: normalizedNewEmail }, { pendingEmail: normalizedNewEmail }],
+      $or: [
+        { email: normalizedNewEmail },
+        { pendingEmail: normalizedNewEmail },
+      ],
     });
     if (existingUser) {
       res.status(409);
@@ -897,10 +909,15 @@ export const requestEmailChange = asyncHandler(
 
     await user.save();
 
-    await sendEmailChangeVerificationEmail(user.email, normalizedNewEmail, token);
+    await sendEmailChangeVerificationEmail(
+      user.email,
+      normalizedNewEmail,
+      token
+    );
 
     res.status(200).json({
-      message: "Verification email sent to the new address. Please verify to complete the change.",
+      message:
+        "Verification email sent to the new address. Please verify to complete the change.",
       shouldLogout: true,
     });
   }
@@ -1158,7 +1175,8 @@ export const updateGuideProgress = asyncHandler(
 
     // Update progress
     const updatedProgress = {
-      completed: completed !== undefined ? completed : currentProgress.completed,
+      completed:
+        completed !== undefined ? completed : currentProgress.completed,
       completedAt:
         completed && !currentProgress.completed
           ? new Date()
