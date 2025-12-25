@@ -12,6 +12,13 @@ export interface MatchQnA {
   createdAt: Date;
 }
 
+// Reusable type for both skip and not-applied reasons
+export interface RejectionReason {
+  category: string; // e.g., "salary", "location", "skills_gap", "company_type", "role_mismatch", "job_inactive", "other"
+  details?: string; // optional free text from user
+  analyzedAt?: Date; // when the AI analyzed this reason
+}
+
 export interface IMatchRecord extends Document {
   userId: mongoose.Types.ObjectId;
   jobId: mongoose.Types.ObjectId;
@@ -23,7 +30,9 @@ export interface IMatchRecord extends Document {
   createdAt: Date;
   updatedAt: Date;
   skipped: boolean;
+  skipReason?: RejectionReason;
   applied: boolean | null;
+  notAppliedReason?: RejectionReason;
   qna?: MatchQnA[];
 }
 
@@ -41,7 +50,23 @@ const MatchRecordSchema: Schema = new Schema(
     },
     clicked: { type: Boolean, default: false },
     skipped: { type: Boolean, default: false },
+    skipReason: {
+      type: {
+        category: { type: String, required: true },
+        details: { type: String },
+        analyzedAt: { type: Date },
+      },
+      default: undefined,
+    },
     applied: { type: Boolean, default: null },
+    notAppliedReason: {
+      type: {
+        category: { type: String, required: true },
+        details: { type: String },
+        analyzedAt: { type: Date },
+      },
+      default: undefined,
+    },
     qna: {
       type: [
         {

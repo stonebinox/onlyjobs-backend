@@ -41,6 +41,8 @@ export const matchUserToJob = async (
       question: item.question,
       answer: item.answer,
     })),
+    // Include learned preferences if available (from previous job rejections)
+    learnedPreferences: user.learnedPreferences?.insights || null,
   };
 
   const jobInfo = {
@@ -54,8 +56,7 @@ export const matchUserToJob = async (
   };
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.2,
+    model: process.env.GPT_MODEL || "gpt-4o-mini",
     messages: [
       { role: "system", content: jobMatcherPrompt },
       {
@@ -129,29 +130,51 @@ export const markMatchAsClicked = async (matchId: string) => {
   return true;
 };
 
-export const skipMatch = async (matchId: string) => {
+export const skipMatch = async (
+  matchId: string,
+  reason?: { category: string; details?: string }
+) => {
   const match = await MatchRecord.findById(matchId);
 
   if (!match) throw new Error("Match not found");
 
   match.skipped = true;
+
+  // If a reason is provided, store it
+  if (reason) {
+    match.skipReason = {
+      category: reason.category,
+      details: reason.details,
+    };
+  }
+
   await match.save();
 
-  return true;
+  return match;
 };
 
 export const markMatchAppliedStatus = async (
   matchId: string,
-  applied: boolean
+  applied: boolean,
+  reason?: { category: string; details?: string }
 ) => {
   const match = await MatchRecord.findById(matchId);
 
   if (!match) throw new Error("Match not found");
 
   match.applied = applied;
+
+  // If not applied and a reason is provided, store it
+  if (!applied && reason) {
+    match.notAppliedReason = {
+      category: reason.category,
+      details: reason.details,
+    };
+  }
+
   await match.save();
 
-  return true;
+  return match;
 };
 
 export const deleteAllMatches = async (userId: string) => {

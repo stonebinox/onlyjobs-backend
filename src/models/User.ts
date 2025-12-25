@@ -1,6 +1,12 @@
 import mongoose, { Document, Schema } from "mongoose";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 
+export interface LearnedPreferences {
+  insights: string; // AI-generated summary for matching prompt
+  lastUpdated: Date;
+  feedbackCount: number; // how many "No" reasons contributed
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -26,6 +32,7 @@ export interface IUser extends Document {
     minScore: number;
     matchingEnabled: boolean;
   };
+  learnedPreferences?: LearnedPreferences;
   skippedJobs: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +70,14 @@ const UserSchema: Schema = new Schema(
       industries: [String],
       minScore: { type: Number, default: 30 },
       matchingEnabled: { type: Boolean, default: true },
+    },
+    learnedPreferences: {
+      type: {
+        insights: { type: String, required: true },
+        lastUpdated: { type: Date, required: true },
+        feedbackCount: { type: Number, required: true, default: 0 },
+      },
+      default: undefined,
     },
     skippedJobs: [{ type: Schema.Types.ObjectId, ref: "JobListing" }],
     isVerified: { type: Boolean, default: false },

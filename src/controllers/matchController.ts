@@ -2,12 +2,15 @@ import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
 
 import MatchRecord from "../models/MatchRecord";
+import User from "../models/User";
+import JobListing from "../models/JobListing";
 import {
   getMatchesData,
   markMatchAsClicked,
   skipMatch,
   markMatchAppliedStatus,
 } from "../services/matchingService";
+import { analyzeRejectionAndUpdatePreferences } from "../services/preferenceLearningService";
 
 // @desc    Get user's job matches
 // @route   GET /api/matches/
@@ -73,14 +76,48 @@ export const markMatchClick = expressAsyncHandler(
 
 export const markMatchAsSkipped = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const { matchId } = req.body;
+    const { matchId, reason, details } = req.body;
 
     if (!matchId) {
       res.status(400);
       throw new Error("Match ID is required");
     }
 
-    await skipMatch(matchId);
+    // Build reason object if provided
+    const reasonObj = reason ? { category: reason, details } : undefined;
+
+    // Update the match record
+    const match = await skipMatch(matchId, reasonObj);
+
+    // If a reason was provided, trigger preference learning
+    if (reasonObj) {
+      try {
+        const user = await User.findById(match.userId);
+        const job = await JobListing.findById(match.jobId);
+
+        if (user && job) {
+          // Run preference learning (real-time)
+          const result = await analyzeRejectionAndUpdatePreferences(
+            user,
+            job,
+            match,
+            reasonObj
+          );
+
+          // Update the match record to mark when it was analyzed
+          if (result) {
+            match.skipReason = {
+              ...match.skipReason!,
+              analyzedAt: new Date(),
+            };
+            await match.save();
+          }
+        }
+      } catch (error) {
+        // Log but don't fail the request if learning fails
+        console.error("Error during preference learning (skip):", error);
+      }
+    }
 
     res.json({ message: "Match marked as skipped" });
   }
@@ -91,7 +128,7 @@ export const markMatchAsSkipped = expressAsyncHandler(
 // @access  Private
 export const markMatchApplied = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const { matchId, applied } = req.body;
+    const { matchId, applied, reason, details } = req.body;
 
     if (!matchId) {
       res.status(400);
@@ -103,7 +140,42 @@ export const markMatchApplied = expressAsyncHandler(
       throw new Error("Applied status must be a boolean");
     }
 
-    await markMatchAppliedStatus(matchId, applied);
+    // Build reason object if provided
+    const reasonObj =
+      !applied && reason ? { category: reason, details } : undefined;
+
+    // Update the match record
+    const match = await markMatchAppliedStatus(matchId, applied, reasonObj);
+
+    // If user said "No" with a reason, trigger preference learning
+    if (!applied && reasonObj) {
+      try {
+        const user = await User.findById(match.userId);
+        const job = await JobListing.findById(match.jobId);
+
+        if (user && job) {
+          // Run preference learning (real-time as per plan)
+          const result = await analyzeRejectionAndUpdatePreferences(
+            user,
+            job,
+            match,
+            reasonObj
+          );
+
+          // Update the match record to mark when it was analyzed
+          if (result) {
+            match.notAppliedReason = {
+              ...match.notAppliedReason!,
+              analyzedAt: new Date(),
+            };
+            await match.save();
+          }
+        }
+      } catch (error) {
+        // Log but don't fail the request if learning fails
+        console.error("Error during preference learning:", error);
+      }
+    }
 
     res.json({ message: "Match applied status updated" });
   }
