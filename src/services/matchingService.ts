@@ -26,12 +26,17 @@ export const calculateJobFreshness = (job: IJobListing): Freshness => {
   return Freshness.STALE;
 };
 
+// Type for pre-fetched QnA data
+export type UserQnAData = Awaited<ReturnType<typeof getUserQnA>>;
+
 export const matchUserToJob = async (
   user: IUser,
-  job: IJobListing
+  job: IJobListing,
+  preloadedQnA?: UserQnAData
 ): Promise<MatchResult> => {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const answeredQuestions = await getUserQnA(user);
+  // Use pre-loaded QnA if provided, otherwise fetch it
+  const answeredQuestions = preloadedQnA ?? (await getUserQnA(user));
 
   const userInfo = {
     name: user.name,

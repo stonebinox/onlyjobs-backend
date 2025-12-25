@@ -29,6 +29,7 @@
     "node-cors": "^1.0.0",
     "node-cron": "^3.0.3",
     "openai": "^5.12.2",
+    "p-limit": "^7.2.0",
     "pdf-parse": "^1.1.1",
     "puppeteer": "^24.6.1",
     "razorpay": "^2.9.6",

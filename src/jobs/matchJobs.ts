@@ -1,13 +1,27 @@
+import pLimit from "p-limit";
+
 import User from "../models/User";
-import JobListing from "../models/JobListing";
-import MatchRecord from "../models/MatchRecord";
+import JobListing, { IJobListing } from "../models/JobListing";
+import MatchRecord, { Freshness } from "../models/MatchRecord";
 import Transaction from "../models/Transaction";
-import { matchUserToJob } from "../services/matchingService";
+import { matchUserToJob, UserQnAData } from "../services/matchingService";
+import { getUserQnA } from "../services/userService";
 import {
   MatchSummaryItem,
   sendMatchSummaryEmail,
 } from "../services/emailService";
 import { filterJobsForUser } from "../utils/filterJobsForUser";
+
+// Concurrency limit for parallel OpenAI calls (10 = ~10x speedup)
+const MATCHING_CONCURRENCY = 10;
+
+interface JobMatchResult {
+  job: IJobListing;
+  matchScore: number;
+  verdict: string;
+  reasoning: string;
+  freshness: Freshness;
+}
 
 export async function runDailyJobMatching(userId?: string): Promise<void> {
   console.log("Starting daily job matching task...");
@@ -55,7 +69,9 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
       const walletBalance = user.walletBalance || 0;
       if (walletBalance < 0.3) {
         console.log(
-          `Skipping user ${user.email} - Insufficient wallet balance: $${walletBalance.toFixed(2)}`
+          `Skipping user ${
+            user.email
+          } - Insufficient wallet balance: $${walletBalance.toFixed(2)}`
         );
         continue;
       }
@@ -79,77 +95,131 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
 
       const alreadyChargedToday = !!existingChargeToday;
 
+      // Filter jobs and get existing matches
       const eligibleJobs = filterJobsForUser(recentJobs, user);
       const existingMatches = await MatchRecord.find({ userId: user._id });
       const matchedJobIds = new Set(
         existingMatches.map((match) => match.jobId.toString())
       );
 
-      let matchFound = false;
+      // Filter out jobs that have already been matched
+      const jobsToProcess = eligibleJobs.filter(
+        (job) => !matchedJobIds.has(job.id.toString())
+      );
+
+      if (jobsToProcess.length === 0) {
+        console.log(`No new jobs to match for user ${user.email}`);
+        continue;
+      }
+
+      console.log(
+        `Processing ${jobsToProcess.length} new jobs for ${user.email} (${MATCHING_CONCURRENCY} concurrent)`
+      );
+
+      // Pre-fetch user QnA once (instead of fetching for every job)
+      const userQnA: UserQnAData = await getUserQnA(user);
+
+      // Create concurrency limiter
+      const limit = pLimit(MATCHING_CONCURRENCY);
+
+      // Process all jobs in parallel with concurrency limit
+      const matchPromises = jobsToProcess.map((job) =>
+        limit(async (): Promise<JobMatchResult | null> => {
+          try {
+            const result = await matchUserToJob(user, job, userQnA);
+            return {
+              job,
+              matchScore: result.matchScore,
+              verdict: result.verdict,
+              reasoning: result.reasoning,
+              freshness: result.freshness,
+            };
+          } catch (error) {
+            console.error(
+              `Error matching job ${job.title} for user ${user.email}:`,
+              error
+            );
+            return null;
+          }
+        })
+      );
+
+      const results = await Promise.all(matchPromises);
+
+      // Process results
       const matchRecords = [];
+      const skippedRecords = [];
       const emailMatches: MatchSummaryItem[] = [];
+      const minScore = user.preferences?.minScore || 30;
 
-      for (const job of eligibleJobs) {
-        if (matchedJobIds.has(job.id.toString())) {
-          continue;
-        }
+      for (const result of results) {
+        if (!result) continue; // Skip failed matches
 
-        const matchResult = await matchUserToJob(user, job);
-
-        if (matchResult.matchScore < (user.preferences?.minScore || 30)) {
-          console.log(
-            `Skipping job ${job.title} for user ${user.email} - Score: ${matchResult.matchScore}`
-          );
-
-          await MatchRecord.create({
+        if (result.matchScore < minScore) {
+          // Below threshold - mark as auto-skipped
+          skippedRecords.push({
             userId: user._id,
-            jobId: job._id,
-            matchScore: matchResult.matchScore,
+            jobId: result.job._id,
+            matchScore: result.matchScore,
             verdict: "skipped",
-            reasoning: matchResult.reasoning || "Below minScore threshold",
-            freshness: matchResult.freshness,
+            reasoning: result.reasoning || "Below minScore threshold",
+            freshness: result.freshness,
             clicked: false,
             skipped: true,
           });
 
-          continue;
+          console.log(
+            `Auto-skipped job ${result.job.title} for ${user.email} - Score: ${result.matchScore}`
+          );
+        } else {
+          // Good match
+          matchRecords.push({
+            userId: user._id,
+            jobId: result.job._id,
+            matchScore: result.matchScore,
+            verdict: result.verdict,
+            reasoning: result.reasoning,
+            freshness: result.freshness,
+            clicked: false,
+          });
+
+          emailMatches.push({
+            title: result.job.title,
+            company: result.job.company,
+            url: result.job.url,
+            matchScore: result.matchScore,
+            freshness: result.freshness,
+          });
+
+          console.log(
+            `Created match for ${user.email} with job ${result.job.title} - Score: ${result.matchScore}`
+          );
         }
+      }
 
-        matchFound = true;
-        matchRecords.push({
-          userId: user._id,
-          jobId: job._id,
-          matchScore: matchResult.matchScore,
-          verdict: matchResult.verdict,
-          reasoning: matchResult.reasoning,
-          freshness: matchResult.freshness,
-          clicked: false,
-        });
-
-        emailMatches.push({
-          title: job.title,
-          company: job.company,
-          url: job.url,
-          matchScore: matchResult.matchScore,
-          freshness: matchResult.freshness,
-        });
-
+      // Bulk insert all records
+      if (skippedRecords.length > 0) {
+        await MatchRecord.insertMany(skippedRecords);
         console.log(
-          `Created match for ${user.email} with job ${job.title} - Score: ${matchResult.matchScore}`
+          `Inserted ${skippedRecords.length} auto-skipped records for ${user.email}`
         );
       }
 
-      // If at least one match was found, create match records
-      if (matchFound) {
-        // Create all match records
+      if (matchRecords.length > 0) {
         await MatchRecord.insertMany(matchRecords);
+        console.log(
+          `Inserted ${matchRecords.length} match records for ${user.email}`
+        );
 
         // Only charge if we haven't charged today yet
         if (!alreadyChargedToday) {
           // Deduct from wallet
           const updatedUser = await User.findById(user._id);
           if (updatedUser) {
-            updatedUser.walletBalance = Math.max(0, (updatedUser.walletBalance || 0) - 0.3);
+            updatedUser.walletBalance = Math.max(
+              0,
+              (updatedUser.walletBalance || 0) - 0.3
+            );
             await updatedUser.save();
 
             // Format date as "Dec 10, 2025" to match frontend display format
@@ -173,7 +243,9 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
             });
 
             console.log(
-              `Deducted $0.30 from ${user.email}'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
+              `Deducted $0.30 from ${
+                user.email
+              }'s wallet. New balance: $${updatedUser.walletBalance.toFixed(2)}`
             );
           }
         } else {
@@ -183,18 +255,35 @@ export async function runDailyJobMatching(userId?: string): Promise<void> {
         }
 
         // Send match summary email (non-blocking for the matching flow)
-        console.log(`[EMAIL] Preparing to send match summary email to ${user.email} with ${emailMatches.length} matches`);
+        console.log(
+          `[EMAIL] Preparing to send match summary email to ${user.email} with ${emailMatches.length} matches`
+        );
         try {
-          const emailSent = await sendMatchSummaryEmail(user, emailMatches, 0.3);
+          const emailSent = await sendMatchSummaryEmail(
+            user,
+            emailMatches,
+            0.3
+          );
           if (emailSent) {
-            console.log(`[EMAIL] ✓ Email notification sent successfully to ${user.email}`);
+            console.log(
+              `[EMAIL] ✓ Email notification sent successfully to ${user.email}`
+            );
           } else {
-            console.log(`[EMAIL] ✗ Email notification was not sent to ${user.email} (check logs above for reason)`);
+            console.log(
+              `[EMAIL] ✗ Email notification was not sent to ${user.email} (check logs above for reason)`
+            );
           }
         } catch (err) {
-          console.error(`[EMAIL] ✗ Exception while sending email to ${user.email}:`, err);
+          console.error(
+            `[EMAIL] ✗ Exception while sending email to ${user.email}:`,
+            err
+          );
         }
       }
+
+      console.log(
+        `Finished processing ${user.email}: ${matchRecords.length} matches, ${skippedRecords.length} auto-skipped`
+      );
     }
 
     console.log("Daily job matching completed successfully");
