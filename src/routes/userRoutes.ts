@@ -23,6 +23,9 @@ import {
   updatePreferences,
   requestEmailChange,
   verifyEmailChange,
+  getGuideProgress,
+  updateGuideProgress,
+  resetGuideProgress,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -61,6 +64,9 @@ router.put("/update-mini-score", protect, updateMinMatchScore);
 router.put("/preferences", protect, updatePreferences);
 router.post("/factory-reset", protect, factoryResetUserAccount);
 router.delete("/delete", protect, deleteUserAccount);
+router.get("/guide-progress", protect, getGuideProgress);
+router.put("/guide-progress", protect, updateGuideProgress);
+router.post("/guide-progress/reset", protect, resetGuideProgress);
 
 // Unused routes
 router.post("/skip/:jobId", protect, skipJob);

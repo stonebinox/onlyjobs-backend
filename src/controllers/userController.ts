@@ -596,6 +596,30 @@ export const getUserProfile = asyncHandler(
       throw new Error("User not found");
     }
 
+    const guideProgress = user.guideProgress || {};
+    const progressMap: {
+      [pageId: string]: {
+        completed: boolean;
+        completedAt?: Date;
+        skipped: boolean;
+        skippedAt?: Date;
+      };
+    } = {};
+
+    // Convert Map to object if it exists
+    if (guideProgress instanceof Map) {
+      guideProgress.forEach((value, key) => {
+        progressMap[key] = {
+          completed: value.completed || false,
+          completedAt: value.completedAt,
+          skipped: value.skipped || false,
+          skippedAt: value.skippedAt,
+        };
+      });
+    } else if (typeof guideProgress === "object") {
+      Object.assign(progressMap, guideProgress);
+    }
+
     res.status(200).json({
       user: {
         id: user.id,
@@ -604,6 +628,7 @@ export const getUserProfile = asyncHandler(
         preferences: user.preferences,
         resume: user.resume,
         createdAt: user.createdAt,
+        guideProgress: progressMap,
       },
     });
   }
@@ -1049,5 +1074,145 @@ export const searchSkills = asyncHandler(
     res.status(200).json({
       skills: skills.slice(0, 10), // Limit to 10 results
     });
+  }
+);
+
+// @desc    Get user guide progress
+// @route   GET /api/users/guide-progress
+// @access  Private
+export const getGuideProgress = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const guideProgress = user.guideProgress || {};
+    const progressMap: {
+      [pageId: string]: {
+        completed: boolean;
+        completedAt?: Date;
+        skipped: boolean;
+        skippedAt?: Date;
+      };
+    } = {};
+
+    // Convert Map to object if it exists
+    if (guideProgress instanceof Map) {
+      guideProgress.forEach((value, key) => {
+        progressMap[key] = {
+          completed: value.completed || false,
+          completedAt: value.completedAt,
+          skipped: value.skipped || false,
+          skippedAt: value.skippedAt,
+        };
+      });
+    } else if (typeof guideProgress === "object") {
+      Object.assign(progressMap, guideProgress);
+    }
+
+    res.status(200).json({
+      guideProgress: progressMap,
+    });
+  }
+);
+
+// @desc    Update user guide progress
+// @route   PUT /api/users/guide-progress
+// @access  Private
+export const updateGuideProgress = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { pageId, completed, skipped } = req.body;
+
+    if (!pageId || typeof pageId !== "string") {
+      res.status(400);
+      throw new Error("Please provide a valid pageId");
+    }
+
+    if (completed === undefined && skipped === undefined) {
+      res.status(400);
+      throw new Error("Please provide either completed or skipped status");
+    }
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    // Initialize guideProgress if it doesn't exist
+    if (!user.guideProgress) {
+      user.guideProgress = new Map();
+    }
+
+    // Get current progress for this page
+    const currentProgress = user.guideProgress.get(pageId) || {
+      completed: false,
+      skipped: false,
+    };
+
+    // Update progress
+    const updatedProgress = {
+      completed: completed !== undefined ? completed : currentProgress.completed,
+      completedAt:
+        completed && !currentProgress.completed
+          ? new Date()
+          : currentProgress.completedAt,
+      skipped: skipped !== undefined ? skipped : currentProgress.skipped,
+      skippedAt:
+        skipped && !currentProgress.skipped
+          ? new Date()
+          : currentProgress.skippedAt,
+    };
+
+    user.guideProgress.set(pageId, updatedProgress);
+    await user.save();
+
+    res.status(200).json({
+      message: "Guide progress updated successfully",
+      guideProgress: {
+        [pageId]: updatedProgress,
+      },
+    });
+  }
+);
+
+// @desc    Reset user guide progress
+// @route   POST /api/users/guide-progress/reset
+// @access  Private
+export const resetGuideProgress = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { pageId } = req.body;
+
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    if (pageId) {
+      // Reset specific page
+      if (user.guideProgress) {
+        user.guideProgress.delete(pageId);
+        await user.save();
+      }
+      res.status(200).json({
+        message: `Guide progress reset for page: ${pageId}`,
+      });
+    } else {
+      // Reset all pages
+      user.guideProgress = new Map();
+      await user.save();
+      res.status(200).json({
+        message: "All guide progress reset successfully",
+      });
+    }
   }
 );
