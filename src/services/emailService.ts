@@ -291,6 +291,56 @@ export const sendMatchingDisabledEmail = async (user: IUser): Promise<boolean> =
   }
 };
 
+// Admin email address for notifications
+const ADMIN_EMAIL = "contact@auroradesignshq.com";
+
+export const sendAdminUserVerifiedEmail = async (
+  userEmail: string,
+  isEmailChange: boolean = false
+): Promise<boolean> => {
+  console.log(`[EMAIL] Attempting to send admin notification for user verification: ${userEmail}`);
+
+  if (!ensureConfigured()) {
+    console.error(`[EMAIL] Skipping admin notification - Resend not configured`);
+    return false;
+  }
+
+  const subject = isEmailChange
+    ? `[OnlyJobs] User changed email: ${userEmail}`
+    : `[OnlyJobs] New user verified: ${userEmail}`;
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #1f2937;">
+      <h2 style="color:#111827;">${isEmailChange ? "User Email Changed" : "New User Verified"}</h2>
+      <p><strong>Email:</strong> ${userEmail}</p>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+      <p style="margin-top:16px; color:#6b7280; font-size:14px;">This is an automated admin notification from OnlyJobs.</p>
+    </div>
+  `;
+
+  try {
+    if (!resendClient) {
+      throw new Error("Resend client not initialized");
+    }
+
+    const FROM_EMAIL = process.env.RESEND_FROM || "onlyjobs <onboarding@resend.dev>";
+
+    const result = await resendClient.emails.send({
+      from: FROM_EMAIL,
+      to: ADMIN_EMAIL,
+      subject,
+      html,
+    });
+
+    console.log(`[EMAIL] ✓ Sent admin user verified notification (ID: ${result.data?.id || "unknown"})`);
+    return true;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(`[EMAIL] ✗ Failed to send admin user verified notification:`, errorMessage);
+    return false;
+  }
+};
+
 export const sendMatchSummaryEmail = async (
   user: IUser,
   matches: MatchSummaryItem[],

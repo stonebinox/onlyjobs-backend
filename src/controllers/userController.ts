@@ -30,6 +30,7 @@ import {
   sendInitialVerificationEmail,
   sendMatchingEnabledEmail,
   sendMatchingDisabledEmail,
+  sendAdminUserVerifiedEmail,
 } from "../services/emailService";
 
 const saltRounds = 10;
@@ -988,6 +989,11 @@ export const verifyEmailChange = asyncHandler(
     user.isVerified = true;
     await user.save();
 
+    // Send admin notification (non-blocking)
+    sendAdminUserVerifiedEmail(user.email, true).catch((err) => {
+      console.error("[EMAIL] Failed to send admin notification:", err);
+    });
+
     res.status(200).json({
       message: "Email updated successfully. Please sign in again.",
       shouldLogout: true,
@@ -1069,6 +1075,11 @@ export const verifyInitialEmail = asyncHandler(
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
+
+    // Send admin notification (non-blocking)
+    sendAdminUserVerifiedEmail(user.email, false).catch((err) => {
+      console.error("[EMAIL] Failed to send admin notification:", err);
+    });
 
     res.status(200).json({
       message: "Email verified successfully.",
