@@ -28,6 +28,77 @@ const ensureConfigured = () => {
   return true;
 };
 
+export const sendInitialVerificationEmail = async (
+  email: string,
+  token: string
+): Promise<boolean> => {
+  console.log(`[EMAIL] Attempting to send initial verification email to ${email}`);
+
+  if (!ensureConfigured()) {
+    console.error(`[EMAIL] Skipping initial verification - Resend not configured`);
+    return false;
+  }
+
+  if (!email) {
+    console.error("[EMAIL] Skipping initial verification - email missing");
+    return false;
+  }
+
+  const frontendUrl =
+    process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
+  const verifyUrl = `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
+
+  const subject = "Verify your email address for onlyjobs";
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #1f2937;">
+      <h2 style="color:#111827;">Verify your email address</h2>
+      <p>Welcome to onlyjobs! Please verify your email address to start receiving job matches.</p>
+      <p>Click the button below to verify your email address.</p>
+      <div style="margin-top:20px; text-align:center;">
+        <a href="${verifyUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:600;">Verify Email</a>
+      </div>
+      <p style="margin-top:16px; color:#6b7280; font-size:14px;">This link will expire in 24 hours and can be used only once.</p>
+      <p style="margin-top:16px;">– The onlyjobs team</p>
+    </div>
+  `;
+
+  try {
+    if (!resendClient) {
+      throw new Error("Resend client not initialized");
+    }
+
+    const FROM_EMAIL = process.env.RESEND_FROM || "onlyjobs <onboarding@resend.dev>";
+
+    console.log(`[EMAIL] Sending initial verification email to ${email} from ${FROM_EMAIL}`);
+    const result = await resendClient.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject,
+      html,
+    });
+
+    console.log(
+      `[EMAIL] ✓ Sent initial verification email to ${email} (ID: ${
+        result.data?.id || "unknown"
+      })`
+    );
+    return true;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[EMAIL] ✗ Failed to send initial verification email to ${email}:`,
+      errorMessage
+    );
+    if (err && typeof err === "object" && "response" in err) {
+      const response = (err as { response?: { body?: unknown } }).response;
+      if (response?.body) {
+        console.error(`[EMAIL] Resend error details:`, JSON.stringify(response.body, null, 2));
+      }
+    }
+    return false;
+  }
+};
+
 export const sendEmailChangeVerificationEmail = async (
   userEmail: string,
   newEmail: string,

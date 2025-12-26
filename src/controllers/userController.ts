@@ -27,6 +27,7 @@ import MatchRecord from "../models/MatchRecord";
 import JobListing, { IJobListing } from "../models/JobListing";
 import {
   sendEmailChangeVerificationEmail,
+  sendInitialVerificationEmail,
   sendMatchingEnabledEmail,
   sendMatchingDisabledEmail,
 } from "../services/emailService";
@@ -66,11 +67,19 @@ export const authenticateUser = asyncHandler(
     if (!user) {
       // we create the user with $2 welcome bonus
       const WELCOME_BONUS = 2;
+      
+      // Generate verification token for new users
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+      
       user = await User.create({
         email,
         password: encryptedPassword,
         lastLoginAt: new Date(),
         walletBalance: WELCOME_BONUS,
+        emailVerificationToken: verificationToken,
+        emailVerificationExpires: verificationExpires,
+        isVerified: false,
       });
 
       // Create a transaction record for the welcome bonus
@@ -84,6 +93,9 @@ export const authenticateUser = asyncHandler(
           type: "welcome_bonus",
         },
       });
+
+      // Send verification email to new user
+      await sendInitialVerificationEmail(user.email, verificationToken);
     } else {
       // we check if the password is correct
       const isMatch = await bcrypt.compare(password, user.password);
@@ -643,6 +655,7 @@ export const getUserProfile = asyncHandler(
         resume: user.resume,
         createdAt: user.createdAt,
         guideProgress: progressMap,
+        isVerified: user.isVerified,
       },
     });
   }
@@ -978,6 +991,87 @@ export const verifyEmailChange = asyncHandler(
     res.status(200).json({
       message: "Email updated successfully. Please sign in again.",
       shouldLogout: true,
+    });
+  }
+);
+
+// @desc    Resend initial email verification
+// @route   POST /api/users/resend-verification
+// @access  Private
+export const resendVerificationEmail = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    if (user.isVerified) {
+      res.status(400);
+      throw new Error("Email is already verified");
+    }
+
+    // Generate verification token
+    const token = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
+    // Clear pendingEmail since we're verifying the current email, not changing it
+    user.emailVerificationToken = token;
+    user.emailVerificationExpires = expires;
+    user.pendingEmail = undefined;
+    await user.save();
+
+    const emailSent = await sendInitialVerificationEmail(user.email, token);
+
+    if (!emailSent) {
+      res.status(500);
+      throw new Error("Failed to send verification email. Please try again later.");
+    }
+
+    res.status(200).json({
+      message: "Verification email sent. Please check your inbox.",
+    });
+  }
+);
+
+// @desc    Verify initial email (one-time token)
+// @route   POST /api/users/verify-email
+// @access  Public
+export const verifyInitialEmail = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string") {
+      res.status(400);
+      throw new Error("Verification token is required");
+    }
+
+    // Find user by token - for initial verification, pendingEmail should be null/undefined
+    // (email changes will have pendingEmail set and use the email-change/verify endpoint)
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: new Date() },
+      $or: [
+        { pendingEmail: { $exists: false } },
+        { pendingEmail: null },
+      ],
+    });
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid or expired verification link");
+    }
+
+    // Mark email as verified
+    user.isVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    res.status(200).json({
+      message: "Email verified successfully.",
     });
   }
 );

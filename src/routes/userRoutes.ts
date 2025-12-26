@@ -23,6 +23,8 @@ import {
   updatePreferences,
   requestEmailChange,
   verifyEmailChange,
+  resendVerificationEmail,
+  verifyInitialEmail,
   getGuideProgress,
   updateGuideProgress,
   resetGuideProgress,
@@ -59,6 +61,8 @@ router.get("/match-qna/:matchRecordId", protect, getMatchQnAHistory);
 router.put("/update-email", protect, updateUserEmailAddress);
 router.post("/email-change/request", protect, requestEmailChange);
 router.post("/email-change/verify", verifyEmailChange);
+router.post("/resend-verification", protect, resendVerificationEmail);
+router.post("/verify-email", verifyInitialEmail);
 router.put("/password", protect, updatePassword);
 router.put("/update-mini-score", protect, updateMinMatchScore);
 router.put("/preferences", protect, updatePreferences);
