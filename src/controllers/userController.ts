@@ -657,6 +657,7 @@ export const getUserProfile = asyncHandler(
         createdAt: user.createdAt,
         guideProgress: progressMap,
         isVerified: user.isVerified,
+        answeredQuestionsCount: user.qna?.filter(q => !q.skipped && q.answer).length || 0,
       },
     });
   }
