@@ -97,12 +97,12 @@ export const getMatchesData = async (
   userId: string,
   minMatchScore: number = 0
 ) => {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const fifteenDaysAgo = new Date();
+  fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
   const matches = await MatchRecord.find({
     userId,
     matchScore: { $gte: minMatchScore },
-    createdAt: { $gte: thirtyDaysAgo },
+    createdAt: { $gte: fifteenDaysAgo },
   }).sort({ createdAt: -1 });
 
   const matchPromises = matches.map(async (match) => {

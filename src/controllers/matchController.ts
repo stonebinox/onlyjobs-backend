@@ -39,11 +39,11 @@ export const getMatches = expressAsyncHandler(
 export const getMatchCount = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user._id;
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
     const matchCount = await MatchRecord.countDocuments({
       userId,
-      createdAt: { $gte: thirtyDaysAgo },
+      createdAt: { $gte: fifteenDaysAgo },
       skipped: false,
     });
 
