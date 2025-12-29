@@ -28,6 +28,8 @@ import {
   getGuideProgress,
   updateGuideProgress,
   resetGuideProgress,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -38,6 +40,8 @@ const router = express.Router();
 
 // Public routes
 router.post("/auth", authenticateUser);
+router.post("/forgot-password", requestPasswordReset);
+router.post("/reset-password", resetPasswordWithToken);
 
 // Protected routes
 router.get("/username", protect, getUserName);

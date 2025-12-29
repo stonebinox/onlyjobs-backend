@@ -42,6 +42,8 @@ export interface IUser extends Document {
   pendingEmail?: string;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   lastLoginAt?: Date;
   guideProgress?: Map<
     string,
@@ -102,6 +104,8 @@ const UserSchema: Schema = new Schema(
     pendingEmail: { type: String },
     emailVerificationToken: { type: String },
     emailVerificationExpires: { type: Date },
+    passwordResetToken: { type: String },
+    passwordResetExpires: { type: Date },
     lastLoginAt: { type: Date },
     guideProgress: {
       type: Map,
