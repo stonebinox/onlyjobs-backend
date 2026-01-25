@@ -37,9 +37,9 @@ export const createPaymentOrder = asyncHandler(
     const userId = req.user._id;
 
     // Validate amount
-    if (!amount || typeof amount !== "number" || amount < 5 || amount > 500) {
+    if (!amount || typeof amount !== "number" || amount < 1 || amount > 500) {
       res.status(400);
-      throw new Error("Amount must be between $5 and $500");
+      throw new Error("Amount must be between $1 and $500");
     }
 
     // Check if amount is an integer (no decimals)
@@ -588,4 +588,3 @@ export const cleanupStalePendingTransactions = async (): Promise<void> => {
     console.error("Error during stale transaction cleanup:", error);
   }
 };
-
