@@ -535,7 +535,14 @@ export const updateUserProfile = asyncHandler(
     const userId = req.user?.id;
     const { resume, socialLinks, phone, name } = req.body;
 
-    if (!resume || typeof resume !== "object") {
+    // At least one field must be provided
+    if (!resume && socialLinks === undefined && phone === undefined && name === undefined) {
+      res.status(400);
+      throw new Error("Please provide at least one field to update");
+    }
+
+    // Validate resume if provided
+    if (resume !== undefined && typeof resume !== "object") {
       res.status(400);
       throw new Error("Please provide valid resume data");
     }
@@ -565,39 +572,44 @@ export const updateUserProfile = asyncHandler(
       user.name = name;
     }
 
-    // Merge resume updates with existing resume data
-    const updatedResume = {
-      ...user.resume,
-      ...resume,
-    };
+    // Handle resume updates if provided
+    if (resume) {
+      // Merge resume updates with existing resume data
+      const updatedResume = {
+        ...user.resume,
+        ...resume,
+      };
 
-    // Validate array fields are arrays
-    const arrayFields = [
-      "skills",
-      "experience",
-      "education",
-      "projects",
-      "certifications",
-      "languages",
-      "achievements",
-      "volunteerExperience",
-      "interests",
-    ];
+      // Validate array fields are arrays
+      const arrayFields = [
+        "skills",
+        "experience",
+        "education",
+        "projects",
+        "certifications",
+        "languages",
+        "achievements",
+        "volunteerExperience",
+        "interests",
+      ];
 
-    for (const field of arrayFields) {
-      if (resume[field] !== undefined) {
-        if (!Array.isArray(resume[field])) {
-          res.status(400);
-          throw new Error(`${field} must be an array`);
+      for (const field of arrayFields) {
+        if (resume[field] !== undefined) {
+          if (!Array.isArray(resume[field])) {
+            res.status(400);
+            throw new Error(`${field} must be an array`);
+          }
+          updatedResume[field] = resume[field];
         }
-        updatedResume[field] = resume[field];
       }
-    }
 
-    // Validate summary is a string if provided
-    if (resume.summary !== undefined && typeof resume.summary !== "string") {
-      res.status(400);
-      throw new Error("summary must be a string");
+      // Validate summary is a string if provided
+      if (resume.summary !== undefined && typeof resume.summary !== "string") {
+        res.status(400);
+        throw new Error("summary must be a string");
+      }
+
+      user.resume = updatedResume;
     }
 
     // Handle socialLinks if provided
@@ -628,8 +640,6 @@ export const updateUserProfile = asyncHandler(
       };
     }
 
-    // Update user with merged resume data
-    user.resume = updatedResume as IUser["resume"];
     await user.save();
 
     res.status(200).json({
