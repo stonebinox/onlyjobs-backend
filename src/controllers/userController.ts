@@ -533,7 +533,7 @@ export const getMatchQnAHistory = asyncHandler(
 export const updateUserProfile = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const { resume } = req.body;
+    const { resume, socialLinks, phone, name } = req.body;
 
     if (!resume || typeof resume !== "object") {
       res.status(400);
@@ -545,6 +545,24 @@ export const updateUserProfile = asyncHandler(
     if (!user) {
       res.status(404);
       throw new Error("User not found");
+    }
+
+    // Update phone if provided
+    if (phone !== undefined) {
+      if (typeof phone !== "string") {
+        res.status(400);
+        throw new Error("phone must be a string");
+      }
+      user.phone = phone;
+    }
+
+    // Update name if provided
+    if (name !== undefined) {
+      if (typeof name !== "string") {
+        res.status(400);
+        throw new Error("name must be a string");
+      }
+      user.name = name;
     }
 
     // Merge resume updates with existing resume data
@@ -582,6 +600,34 @@ export const updateUserProfile = asyncHandler(
       throw new Error("summary must be a string");
     }
 
+    // Handle socialLinks if provided
+    if (socialLinks !== undefined) {
+      if (typeof socialLinks !== "object" || socialLinks === null) {
+        res.status(400);
+        throw new Error("socialLinks must be an object");
+      }
+
+      const allowedSocialLinks = ["linkedin", "github", "portfolio", "twitter", "website"];
+      const socialLinksKeys = Object.keys(socialLinks);
+
+      for (const key of socialLinksKeys) {
+        if (!allowedSocialLinks.includes(key)) {
+          res.status(400);
+          throw new Error(`Invalid social link key: ${key}`);
+        }
+        if (socialLinks[key] !== undefined && typeof socialLinks[key] !== "string") {
+          res.status(400);
+          throw new Error(`${key} must be a string`);
+        }
+      }
+
+      // Merge social links with existing data
+      user.socialLinks = {
+        ...user.socialLinks,
+        ...socialLinks,
+      };
+    }
+
     // Update user with merged resume data
     user.resume = updatedResume as IUser["resume"];
     await user.save();
@@ -593,8 +639,10 @@ export const updateUserProfile = asyncHandler(
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         preferences: user.preferences,
         resume: user.resume,
+        socialLinks: user.socialLinks,
         createdAt: user.createdAt,
       },
     });
@@ -653,8 +701,10 @@ export const getUserProfile = asyncHandler(
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         preferences: user.preferences,
         resume: user.resume,
+        socialLinks: user.socialLinks,
         createdAt: user.createdAt,
         guideProgress: progressMap,
         isVerified: user.isVerified,

@@ -11,6 +11,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  phone?: string;
   resume: {
     skills: string[];
     experience: string[];
@@ -22,6 +23,13 @@ export interface IUser extends Document {
     achievements: string[]; // New field for personal or professional achievements
     volunteerExperience: string[]; // New field for volunteer work
     interests: string[]; // New field for personal interests
+  };
+  socialLinks?: {
+    linkedin?: string;
+    github?: string;
+    portfolio?: string;
+    twitter?: string;
+    website?: string;
   };
   preferences: {
     jobTypes: string[];
@@ -61,6 +69,7 @@ const UserSchema: Schema = new Schema(
     name: { type: String, required: false },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    phone: { type: String, required: false },
     resume: {
       skills: [String],
       experience: [String],
@@ -72,6 +81,13 @@ const UserSchema: Schema = new Schema(
       achievements: [String], // Add achievements field
       volunteerExperience: [String], // Add volunteer experience field
       interests: [String], // Add interests field
+    },
+    socialLinks: {
+      linkedin: { type: String },
+      github: { type: String },
+      portfolio: { type: String },
+      twitter: { type: String },
+      website: { type: String },
     },
     preferences: {
       jobTypes: [String],
