@@ -14,6 +14,7 @@ export interface IJobListing extends Document {
   source: string;
   description: string;
   url: string;
+  sourceUrl?: string; // Original URL from the source (e.g., WWR URL before resolution)
   postedDate: Date;
   scrapedDate: Date;
   createdAt: Date;
@@ -35,6 +36,7 @@ const JobListingSchema: Schema = new Schema(
     source: { type: String, required: true },
     description: { type: String, required: true },
     url: { type: String, required: true },
+    sourceUrl: { type: String }, // Original URL from source before resolution (optional)
     postedDate: Date,
     scrapedDate: { type: Date, default: Date.now },
   },
