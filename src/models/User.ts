@@ -14,12 +14,12 @@ export interface IUser extends Document {
   phone?: string;
   resume: {
     skills: string[];
-    experience: string[];
+    experience: (string | { text: string; link?: string })[];
     education: string[];
     summary: string;
     certifications: string[]; // New field for certifications
     languages: string[]; // New field for languages
-    projects: string[]; // New field for projects
+    projects: (string | { text: string; link?: string })[]; // New field for projects
     achievements: string[]; // New field for personal or professional achievements
     volunteerExperience: string[]; // New field for volunteer work
     interests: string[]; // New field for personal interests
@@ -72,12 +72,12 @@ const UserSchema: Schema = new Schema(
     phone: { type: String, required: false },
     resume: {
       skills: [String],
-      experience: [String],
+      experience: [Schema.Types.Mixed], // Support both string and { text: string, link?: string }
       education: [String],
       summary: String,
       certifications: [String], // Add certifications field
       languages: [String], // Add languages field
-      projects: [String], // Add projects field
+      projects: [Schema.Types.Mixed], // Support both string and { text: string, link?: string }
       achievements: [String], // Add achievements field
       volunteerExperience: [String], // Add volunteer experience field
       interests: [String], // Add interests field
