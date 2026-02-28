@@ -67,6 +67,14 @@ export const authenticateUser = asyncHandler(
     const encryptedPassword = await bcrypt.hash(password, saltRounds);
 
     if (!user) {
+      // Block email addresses with + pattern to prevent signup credit abuse
+      // (e.g., user+test@gmail.com, user+1@gmail.com all deliver to user@gmail.com)
+      const localPart = email.split("@")[0];
+      if (localPart.includes("+")) {
+        res.status(400);
+        throw new Error("Email addresses with '+' are not allowed. Please use your primary email address.");
+      }
+
       // we create the user with $2 welcome bonus
       const WELCOME_BONUS = 2;
       
@@ -957,6 +965,13 @@ export const requestEmailChange = asyncHandler(
     }
 
     const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+    // Block email addresses with + pattern to prevent abuse
+    const localPart = normalizedNewEmail.split("@")[0];
+    if (localPart.includes("+")) {
+      res.status(400);
+      throw new Error("Email addresses with '+' are not allowed. Please use your primary email address.");
+    }
 
     // Check if another account already uses this email (active or pending)
     const existingUser = await User.findOne({
