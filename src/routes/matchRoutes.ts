@@ -7,6 +7,7 @@ import {
   markMatchAsSkipped,
   markMatchClick,
   markMatchApplied,
+  recordApplicationOutcome,
 } from "../controllers/matchController";
 
 const router = express.Router();
@@ -16,5 +17,6 @@ router.get("/count", protect, getMatchCount);
 router.post("/click", protect, markMatchClick);
 router.post("/skip", protect, markMatchAsSkipped);
 router.post("/applied", protect, markMatchApplied);
+router.post("/:id/outcome", protect, recordApplicationOutcome);
 
 export default router;

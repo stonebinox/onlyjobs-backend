@@ -180,3 +180,42 @@ export const markMatchApplied = expressAsyncHandler(
     res.json({ message: "Match applied status updated" });
   }
 );
+
+// @desc    Record application outcome (heard back, rejected, etc.)
+// @route   POST /api/matches/:id/outcome
+// @access  Private
+export const recordApplicationOutcome = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { outcome } = req.body;
+    const userId = req.user._id;
+
+    const validOutcomes = ['heard_back', 'no_response', 'rejected', 'interview', 'offer'];
+    if (!outcome || !validOutcomes.includes(outcome)) {
+      res.status(400);
+      throw new Error(`Invalid outcome. Must be one of: ${validOutcomes.join(', ')}`);
+    }
+
+    const match = await MatchRecord.findById(id);
+    if (!match) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+
+    if (match.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    if (match.applied !== true) {
+      res.status(400);
+      throw new Error("Can only record outcome for applied jobs");
+    }
+
+    match.applicationOutcome = outcome;
+    match.outcomeRecordedAt = new Date();
+    await match.save();
+
+    res.json({ message: "Application outcome recorded", outcome });
+  }
+);

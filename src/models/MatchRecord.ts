@@ -6,6 +6,14 @@ export enum Freshness {
   STALE = "Stale",
 }
 
+export enum ApplicationOutcome {
+  HEARD_BACK = "heard_back",
+  NO_RESPONSE = "no_response",
+  REJECTED = "rejected",
+  INTERVIEW = "interview",
+  OFFER = "offer",
+}
+
 export interface MatchQnA {
   question: string;
   answer: string;
@@ -32,6 +40,10 @@ export interface IMatchRecord extends Document {
   skipped: boolean;
   skipReason?: RejectionReason;
   applied: boolean | null;
+  appliedAt?: Date | null;
+  followUpSentAt?: Date | null;
+  applicationOutcome?: string | null;
+  outcomeRecordedAt?: Date | null;
   notAppliedReason?: RejectionReason;
   qna?: MatchQnA[];
 }
@@ -59,6 +71,10 @@ const MatchRecordSchema: Schema = new Schema(
       default: undefined,
     },
     applied: { type: Boolean, default: null },
+    appliedAt: { type: Date, default: undefined },
+    followUpSentAt: { type: Date, default: undefined },
+    applicationOutcome: { type: String, enum: Object.values(ApplicationOutcome), default: undefined },
+    outcomeRecordedAt: { type: Date, default: undefined },
     notAppliedReason: {
       type: {
         category: { type: String, required: true },
@@ -83,5 +99,6 @@ const MatchRecordSchema: Schema = new Schema(
 
 // Ensure unique matches between users and jobs
 MatchRecordSchema.index({ userId: 1, jobId: 1 }, { unique: true });
+MatchRecordSchema.index({ applied: 1, appliedAt: 1, followUpSentAt: 1, userId: 1 });
 
 export default mongoose.model<IMatchRecord>("MatchRecord", MatchRecordSchema);

@@ -167,6 +167,15 @@ export const markMatchAppliedStatus = async (
 
   if (!match) throw new Error("Match not found");
 
+  if (applied === true && match.applied !== true) {
+    match.appliedAt = new Date();
+  } else if (applied === false) {
+    match.appliedAt = undefined;
+    match.followUpSentAt = undefined;
+    match.applicationOutcome = undefined;
+    match.outcomeRecordedAt = undefined;
+  }
+
   match.applied = applied;
 
   // If not applied and a reason is provided, store it
