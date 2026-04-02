@@ -91,6 +91,27 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "update_memory",
+      description: "Update an existing piece of information about the user that was previously saved.",
+      parameters: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            description: "The identifier of the information to update (e.g. 'preferred_role', 'target_salary')",
+          },
+          value: {
+            type: "string",
+            description: "The updated information",
+          },
+        },
+        required: ["key", "value"],
+      },
+    },
+  },
 ];
 
 function buildSystemPrompt(memoryEntries: { key: string; value: string }[]): string {
@@ -120,6 +141,7 @@ When you learn something important about the user (their target role, salary exp
 
 async function executeToolCall(
   userId: string,
+  conversationId: string,
   toolName: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
@@ -137,6 +159,22 @@ async function executeToolCall(
       .sort({ runAt: -1 })
       .limit(30)
       .lean();
+
+    if (logs.length === 0) {
+      const [totalMatches, totalSkipped] = await Promise.all([
+        MatchRecord.countDocuments({ userId: userObjectId, createdAt: { $gte: since }, skipped: false }),
+        MatchRecord.countDocuments({ userId: userObjectId, createdAt: { $gte: since }, skipped: true }),
+      ]);
+      return {
+        logs: [],
+        fallback: {
+          totalMatches,
+          totalSkipped,
+          period: `last ${days} days`,
+          note: "Detailed run logs are not yet available. These statistics are based on individual match records and may be less precise.",
+        },
+      };
+    }
 
     return logs.map((log) => ({
       runAt: log.runAt,
@@ -223,9 +261,10 @@ async function executeToolCall(
     };
   }
 
-  if (toolName === "save_memory") {
+  if (toolName === "save_memory" || toolName === "update_memory") {
     const key = String(args.key ?? "");
     const value = String(args.value ?? "");
+    const now = new Date();
 
     const memory = await ChatMemory.findOne({ userId: userObjectId });
 
@@ -233,15 +272,19 @@ async function executeToolCall(
       const existing = memory.entries.find((e) => e.key === key);
       if (existing) {
         existing.value = value;
-        existing.updatedAt = new Date();
+        existing.updatedAt = now;
       } else {
-        memory.entries.push({ key, value, source: "chat", createdAt: new Date(), updatedAt: new Date() });
+        memory.entries.push({ key, value, source: conversationId, createdAt: now, updatedAt: now });
+      }
+      if (memory.entries.length > 50) {
+        memory.entries.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+        memory.entries.splice(0, memory.entries.length - 50);
       }
       await memory.save();
     } else {
       await ChatMemory.create({
         userId: userObjectId,
-        entries: [{ key, value, source: "chat", createdAt: new Date(), updatedAt: new Date() }],
+        entries: [{ key, value, source: conversationId, createdAt: now, updatedAt: now }],
       });
     }
 
@@ -279,12 +322,25 @@ export async function processMessage(
   const memory = await ChatMemory.findOne({ userId: userObjectId }).lean();
   const memoryEntries = memory?.entries ?? [];
 
-  // Build OpenAI messages (last 20 only)
-  const recentMessages = conversation.messages.slice(-20);
+  // Build OpenAI messages (last 20 only, with summary note if conversation is longer)
+  const allMessages = conversation.messages;
+  const recentMessages = allMessages.slice(-20);
   const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: buildSystemPrompt(memoryEntries) },
-    ...recentMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
   ];
+
+  if (allMessages.length > 20) {
+    const firstMessage = allMessages[0];
+    const truncatedFirst = firstMessage.content.slice(0, 100);
+    openaiMessages.push({
+      role: "system",
+      content: `Earlier in this conversation, the user initially asked: "${truncatedFirst}". The conversation has had ${allMessages.length} messages total. Here are the most recent 20:`,
+    });
+  }
+
+  openaiMessages.push(
+    ...recentMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+  );
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   let reply = "";
@@ -318,7 +374,9 @@ export async function processMessage(
       let toolResult: unknown;
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
-        toolResult = await executeToolCall(userId, toolCall.function.name, args);
+        console.log(`[Chat] Tool call: ${toolCall.function.name}(${toolCall.function.arguments})`);
+        toolResult = await executeToolCall(userId, String(conversation._id), toolCall.function.name, args);
+        console.log(`[Chat] Tool result: ${JSON.stringify(toolResult).substring(0, 200)}`);
       } catch (err) {
         toolResult = { error: `Tool execution failed: ${err instanceof Error ? err.message : String(err)}` };
       }
