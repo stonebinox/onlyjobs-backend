@@ -5,6 +5,7 @@ import ChatMemory from "../models/ChatMemory";
 import MatchRunLog from "../models/MatchRunLog";
 import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
+import FieldProfile from "../models/FieldProfile";
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
@@ -262,9 +263,56 @@ async function executeToolCall(
   }
 
   if (toolName === "get_successful_profiles_in_field") {
+    const requestedField = String(args.field ?? "").toLowerCase().replace(/\s+/g, "_");
+
+    // Load all available profiles to support fuzzy matching and available-fields list
+    const allProfiles = await FieldProfile.find({ sampleSize: { $gte: 5 } })
+      .select("field sampleSize topSkills commonPreferences updatedAt")
+      .lean();
+
+    const availableFields = allProfiles.map((p) => p.field);
+
+    // Try exact match first, then partial match
+    let profile = allProfiles.find((p) => p.field === requestedField);
+    if (!profile) {
+      profile = allProfiles.find(
+        (p) => p.field.includes(requestedField) || requestedField.includes(p.field)
+      );
+    }
+
+    if (!profile) {
+      return {
+        available: false,
+        message: `Not enough data for this field yet. Try a broader field like 'backend_engineering' or 'frontend_engineering'.`,
+        availableFields,
+      };
+    }
+
+    const user = await User.findById(userObjectId)
+      .select("resume.skills preferences.remoteOnly preferences.minSalary")
+      .lean();
+
+    const userSkills = (user?.resume?.skills ?? []).map((s) => s.toLowerCase().trim());
+
+    const skillGaps = profile.topSkills
+      .filter((s) => !userSkills.includes(s.name.toLowerCase().trim()))
+      .slice(0, 10)
+      .map((s) => s.name);
+
     return {
-      available: false,
-      message: "Profile comparison data is not yet available. This feature is coming soon.",
+      available: true,
+      field: profile.field,
+      sampleSize: profile.sampleSize,
+      updatedAt: profile.updatedAt.toISOString().split("T")[0],
+      skillGaps,
+      userSkills: user?.resume?.skills ?? [],
+      topFieldSkills: profile.topSkills.slice(0, 15),
+      preferenceComparison: {
+        fieldRemoteOnlyPercent: profile.commonPreferences.remoteOnlyPercent,
+        userRemoteOnly: user?.preferences?.remoteOnly ?? false,
+        fieldAvgMinSalary: profile.commonPreferences.avgMinSalary,
+        userMinSalary: user?.preferences?.minSalary ?? 0,
+      },
     };
   }
 
