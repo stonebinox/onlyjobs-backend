@@ -31,10 +31,11 @@ export const sendMessage = expressAsyncHandler(
     } catch (error: any) {
       const message = error?.message || 'Chat processing failed';
       if (message === 'Conversation not found') {
-        return res.status(404).json({ error: message });
+        res.status(404).json({ error: message });
       } else {
-        return res.status(500).json({ error: message });
+        res.status(500).json({ error: message });
       }
+      return;
     }
   }
 );
