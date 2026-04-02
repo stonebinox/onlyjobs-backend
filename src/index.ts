@@ -7,6 +7,7 @@ import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import matchRoutes from "./routes/matchRoutes";
 import walletRoutes from "./routes/walletRoutes";
+import chatRoutes from "./routes/chatRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +36,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/wallet", walletRoutes);
+app.use("/api/chat", chatRoutes);
 
 // Basic health check route
 app.get("/healthcheck", (req, res) => {
