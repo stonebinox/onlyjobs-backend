@@ -28,9 +28,13 @@ export const sendMessage = expressAsyncHandler(
       const result = await processMessage(userId, message, conversationId);
 
       res.json({ reply: result.reply, conversationId: result.conversationId });
-    } catch (error) {
-      res.status(500);
-      throw error;
+    } catch (error: any) {
+      const message = error?.message || 'Chat processing failed';
+      if (message === 'Conversation not found') {
+        return res.status(404).json({ error: message });
+      } else {
+        return res.status(500).json({ error: message });
+      }
     }
   }
 );
