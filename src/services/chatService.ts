@@ -301,6 +301,34 @@ async function executeToolCall(
   return { error: `Unknown tool: ${toolName}` };
 }
 
+const CONVERSATION_CUTOFF = 20;
+
+async function summarizeOlderMessages(
+  openai: OpenAI,
+  messages: { role: string; content: string }[],
+  existingSummary?: string
+): Promise<string> {
+  const conversationText = messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n");
+
+  const systemPrompt = "Summarize this conversation concisely. Focus on: what the user asked about, key information revealed, decisions made, and any unresolved questions. Keep it under 200 words.";
+
+  const userContent = existingSummary
+    ? `Previous summary: ${existingSummary}\n\nNow also summarize these additional messages:\n${conversationText}`
+    : conversationText;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+  });
+
+  return response.choices[0].message.content ?? "";
+}
+
 export async function processMessage(
   userId: string,
   message: string,
@@ -329,27 +357,56 @@ export async function processMessage(
   const memory = await ChatMemory.findOne({ userId: userObjectId }).lean();
   const memoryEntries = memory?.entries ?? [];
 
-  // Build OpenAI messages (last 20 only, with summary note if conversation is longer)
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  // Build OpenAI messages (last CONVERSATION_CUTOFF only, with AI summary if conversation is longer)
   const allMessages = conversation.messages;
-  const recentMessages = allMessages.slice(-20);
   const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: buildSystemPrompt(memoryEntries) },
   ];
 
-  if (allMessages.length > 20) {
-    const firstMessage = allMessages[0];
-    const truncatedFirst = firstMessage.content.slice(0, 100);
-    openaiMessages.push({
-      role: "system",
-      content: `Earlier in this conversation, the user initially asked: "${truncatedFirst}". The conversation has had ${allMessages.length} messages total. Here are the most recent 20:`,
-    });
+  if (allMessages.length > CONVERSATION_CUTOFF) {
+    const cutoffIndex = allMessages.length - CONVERSATION_CUTOFF;
+    const existingSummaryUpTo = conversation.summaryUpToIndex ?? 0;
+
+    let summary = conversation.summary;
+
+    // Only re-summarize if there are new messages beyond what was previously summarized
+    if (!summary || existingSummaryUpTo < cutoffIndex) {
+      const messagesToSummarize = allMessages.slice(existingSummaryUpTo, cutoffIndex);
+      try {
+        summary = await withTimeout(
+          summarizeOlderMessages(openai, messagesToSummarize, summary ?? undefined),
+          10000,
+          "summarize_conversation"
+        );
+        conversation.summary = summary;
+        conversation.summaryUpToIndex = cutoffIndex;
+      } catch {
+        // Fall back to first-message snippet approach
+        const firstMessage = allMessages[0];
+        const truncatedFirst = firstMessage.content.slice(0, 100);
+        summary = undefined;
+        openaiMessages.push({
+          role: "system",
+          content: `Earlier in this conversation, the user initially asked: "${truncatedFirst}". The conversation has had ${allMessages.length} messages total. Here are the most recent ${CONVERSATION_CUTOFF}:`,
+        });
+      }
+    }
+
+    if (summary) {
+      openaiMessages.push({
+        role: "system",
+        content: `Summary of earlier conversation: ${summary}`,
+      });
+    }
   }
 
+  const recentMessages = allMessages.slice(-CONVERSATION_CUTOFF);
   openaiMessages.push(
     ...recentMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
   );
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   let reply = "";
   let iterations = 0;
   const MAX_ITERATIONS = 5;

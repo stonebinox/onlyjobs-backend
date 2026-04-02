@@ -8,6 +8,8 @@ export interface IChatConversation extends Document {
     content: string;
     createdAt: Date;
   }[];
+  summary?: string;
+  summaryUpToIndex?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +28,8 @@ const ChatConversationSchema: Schema = new Schema(
       ],
       default: [],
     },
+    summary: { type: String },
+    summaryUpToIndex: { type: Number },
   },
   { timestamps: true }
 );
