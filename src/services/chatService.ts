@@ -6,6 +6,13 @@ import MatchRunLog from "../models/MatchRunLog";
 import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -127,7 +134,7 @@ OnlyJobs works like this:
 
 Your personality: friendly, concise, and actionable. Give specific advice the user can act on. Avoid vague suggestions.
 
-When you learn something important about the user (their target role, salary expectations, preferred industries, frustrations, goals), use the save_memory tool to remember it for future conversations.`;
+When you learn something important about the user (their target role, salary expectations, preferred industries, frustrations, goals), use the save_memory tool to remember it for future conversations. Use save_memory when you learn something new about the user. Use update_memory when you need to correct or update an existing memory.`;
 
   if (memoryEntries.length > 0) {
     prompt += `\n\nWhat I know about you:\n`;
@@ -350,12 +357,12 @@ export async function processMessage(
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
-    const response = await openai.chat.completions.create({
+    const response = await withTimeout(openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: openaiMessages,
       tools: TOOLS,
       tool_choice: "auto",
-    });
+    }), 30000, "openai.chat.completions.create");
 
     const choice = response.choices[0];
     const responseMessage = choice.message;
@@ -375,7 +382,7 @@ export async function processMessage(
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
         console.log(`[Chat] Tool call: ${toolCall.function.name}(${toolCall.function.arguments})`);
-        toolResult = await executeToolCall(userId, String(conversation._id), toolCall.function.name, args);
+        toolResult = await withTimeout(executeToolCall(userId, String(conversation._id), toolCall.function.name, args), 15000, toolCall.function.name);
         console.log(`[Chat] Tool result: ${JSON.stringify(toolResult).substring(0, 200)}`);
       } catch (err) {
         toolResult = { error: `Tool execution failed: ${err instanceof Error ? err.message : String(err)}` };
