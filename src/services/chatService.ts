@@ -341,6 +341,10 @@ export async function processMessage(
     ? await ChatConversation.findOne({ _id: conversationId, userId: userObjectId })
     : null;
 
+  if (conversationId && !conversation) {
+    throw new Error('Conversation not found');
+  }
+
   if (!conversation) {
     conversation = new ChatConversation({ userId: userObjectId, title: "", messages: [] });
   }
