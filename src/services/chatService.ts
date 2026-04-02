@@ -533,5 +533,5 @@ export async function checkRateLimit(userId: string): Promise<boolean> {
   ]);
 
   const count = result[0]?.total ?? 0;
-  return count < 20;
+  return count < 50;
 }
