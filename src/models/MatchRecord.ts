@@ -15,6 +15,7 @@ export enum ApplicationOutcome {
 }
 
 export interface MatchQnA {
+  _id?: mongoose.Types.ObjectId;
   question: string;
   answer: string;
   createdAt: Date;

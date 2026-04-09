@@ -14,6 +14,7 @@ import { questions } from "../utils/questions";
 import { Question } from "../types/Question";
 import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstructions";
 import { IJobListing } from "../models/JobListing";
+import { IMatchRecord } from "../models/MatchRecord";
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -274,7 +275,8 @@ export const getAnswerForQuestion = async (
   user: IUser,
   question: string,
   jobResult?: IJobListing | null,
-  matchRecordId?: string
+  matchRecord?: IMatchRecord | null,
+  customInstructions?: string
 ) => {
   const answeredQuestions = await getUserQnA(user);
   const partialUserData = user.toObject();
@@ -296,27 +298,21 @@ export const getAnswerForQuestion = async (
     delete jobDetails.updatedAt;
   }
 
-  // Fetch previous Q&A for this specific match if matchRecordId is provided
+  // Build matchQnAHistory from the trusted matchRecord object passed in
   let matchQnAHistory: Array<{ question: string; answer: string }> = [];
-  if (matchRecordId) {
-    const MatchRecord = (await import("../models/MatchRecord")).default;
-    const matchRecord = await MatchRecord.findById(matchRecordId).lean();
+  if (matchRecord && matchRecord.qna && matchRecord.qna.length > 0) {
+    const sortedQnA = [...matchRecord.qna]
+      .sort((a, b) => {
+        const dateA = a.createdAt || new Date(0);
+        const dateB = b.createdAt || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      })
+      .slice(0, 10);
 
-    if (matchRecord && matchRecord.qna && matchRecord.qna.length > 0) {
-      // Sort by creation date (newest first) and get last 10 for context
-      const sortedQnA = [...matchRecord.qna]
-        .sort((a, b) => {
-          const dateA = a.createdAt || new Date(0);
-          const dateB = b.createdAt || new Date(0);
-          return dateB.getTime() - dateA.getTime();
-        })
-        .slice(0, 10);
-
-      matchQnAHistory = sortedQnA.map((qa) => ({
-        question: qa.question,
-        answer: qa.answer,
-      }));
-    }
+    matchQnAHistory = sortedQnA.map((qa) => ({
+      question: qa.question,
+      answer: qa.answer,
+    }));
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -331,7 +327,8 @@ export const getAnswerForQuestion = async (
             answeredQuestions,
             partialUserData,
             jobResult,
-            matchQnAHistory
+            matchQnAHistory,
+            customInstructions
           ),
         },
         {

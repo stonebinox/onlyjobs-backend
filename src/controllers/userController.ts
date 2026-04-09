@@ -404,34 +404,50 @@ export const setSkippedQuestion = asyncHandler(
 export const createAnswer = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const { question } = req.body;
+    const {
+      question,
+      jobResultId,
+      customInstructions: rawCustomInstructions,
+      regenerate,
+    } = req.body;
 
     if (!question || question.trim() === "") {
       res.status(400);
       throw new Error("Please provide a valid question");
     }
-    const user = await User.findById(userId);
 
+    const user = await User.findById(userId);
     if (!user) {
       res.status(404);
       throw new Error("User not found");
     }
 
-    let jobDetails = null;
-    let matchRecordId: string | null = null;
+    let jobDetails: IJobListing | null = null;
+    let matchRecord: import("../models/MatchRecord").IMatchRecord | null = null;
 
-    if (req.body.jobResultId) {
-      const jobResultId = req.body.jobResultId;
-      let jobResult = await MatchRecord.findById(jobResultId);
+    if (jobResultId) {
+      const found = await MatchRecord.findById(jobResultId);
+      if (!found) {
+        res.status(404);
+        throw new Error("Match record not found");
+      }
+      if (found.userId.toString() !== userId) {
+        res.status(403).json({ success: false, message: "Forbidden" });
+        return;
+      }
+      matchRecord = found;
+      jobDetails = (await JobListing.findById(
+        found.jobId.toString()
+      )) as IJobListing | null;
+    }
 
-      if (!jobResult) {
-        jobResult = null;
-      } else {
-        matchRecordId = jobResultId;
-        const jobId = jobResult.jobId;
-        jobDetails = (await JobListing.findById(
-          jobId.toString()
-        )) as IJobListing | null;
+    // Trim and silently truncate customInstructions to 500 chars
+    let sanitizedCustomInstructions: string | undefined;
+    if (rawCustomInstructions && typeof rawCustomInstructions === "string") {
+      const trimmed = rawCustomInstructions.trim();
+      if (trimmed.length > 0) {
+        sanitizedCustomInstructions =
+          trimmed.length > 500 ? trimmed.slice(0, 500) : trimmed;
       }
     }
 
@@ -440,7 +456,8 @@ export const createAnswer = asyncHandler(
         user,
         question,
         jobDetails,
-        matchRecordId || undefined
+        matchRecord ?? undefined,
+        sanitizedCustomInstructions
       );
 
       if (!answer) {
@@ -448,25 +465,62 @@ export const createAnswer = asyncHandler(
           success: false,
           message: "Invalid answer",
         });
-
         return;
       }
 
-      // Save Q&A pair to database if matchRecordId is provided
-      if (matchRecordId) {
-        await MatchRecord.findByIdAndUpdate(
-          matchRecordId,
-          {
+      if (matchRecord) {
+        const trimmedQuestion = question.trim();
+        if (regenerate === true) {
+          // Find the most-recent matching qna entry in-memory, then replace it
+          // atomically using arrayFilters keyed on _id.
+          // MongoDB auto-generates _id for each subdocument (Mongoose default).
+          const matchingEntries = [...(matchRecord.qna ?? [])]
+            .filter((q) => q.question === trimmedQuestion)
+            .sort((a, b) => {
+              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return dateB - dateA;
+            });
+          const mostRecent = matchingEntries[0];
+
+          if (mostRecent?._id) {
+            await MatchRecord.findByIdAndUpdate(
+              matchRecord._id,
+              {
+                $set: {
+                  "qna.$[target].answer": answer,
+                  "qna.$[target].createdAt": new Date(),
+                },
+              },
+              {
+                arrayFilters: [{ "target._id": mostRecent._id }],
+                new: true,
+              }
+            );
+          } else {
+            // Fallback: no prior matching entry — append as new
+            await MatchRecord.findByIdAndUpdate(matchRecord._id, {
+              $push: {
+                qna: {
+                  question: trimmedQuestion,
+                  answer,
+                  createdAt: new Date(),
+                },
+              },
+            });
+          }
+        } else {
+          // Default: append
+          await MatchRecord.findByIdAndUpdate(matchRecord._id, {
             $push: {
               qna: {
-                question: question.trim(),
+                question: trimmedQuestion,
                 answer,
                 createdAt: new Date(),
               },
             },
-          },
-          { new: true }
-        );
+          });
+        }
       }
 
       res.status(200).json({
