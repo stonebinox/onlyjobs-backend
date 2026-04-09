@@ -148,7 +148,7 @@ When you learn something important about the user (their target role, salary exp
 }
 
 async function executeToolCall(
-  userId: string,
+  userId: string | mongoose.Types.ObjectId,
   conversationId: string,
   toolName: string,
   args: Record<string, unknown>
@@ -378,7 +378,7 @@ async function summarizeOlderMessages(
 }
 
 export async function processMessage(
-  userId: string,
+  userId: string | mongoose.Types.ObjectId,
   message: string,
   conversationId?: string
 ): Promise<{ reply: string; conversationId: string }> {
@@ -516,7 +516,7 @@ export async function processMessage(
   return { reply, conversationId: String(conversation._id) };
 }
 
-export async function checkRateLimit(userId: string): Promise<boolean> {
+export async function checkRateLimit(userId: string | mongoose.Types.ObjectId): Promise<boolean> {
   const userObjectId = new mongoose.Types.ObjectId(userId);
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 

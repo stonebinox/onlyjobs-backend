@@ -134,7 +134,7 @@ export const authenticateUser = asyncHandler(
 // @route   GET /api/users/username
 // @access  Private
 export const getUserName = asyncHandler(async (req: Request, res: Response) => {
-  const username = await getUserNameById(req.user?.id);
+  const username = await getUserNameById(req.user!.id);
 
   res.status(200).json({
     username,
@@ -165,7 +165,7 @@ export const updateUserCV = asyncHandler(
       throw new Error("Please upload a file");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const file = req.file;
 
     // Check file type
@@ -223,7 +223,7 @@ export const updateUserCV = asyncHandler(
 // @route   GET /api/users/question
 // @access  Private
 export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
+  const userId = req.user!.id;
 
   const user = await User.findById(userId);
 
@@ -244,7 +244,7 @@ export const getQuestion = asyncHandler(async (req: Request, res: Response) => {
 // @access  Private
 export const setUserAnswer = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { answer } = req.body;
 
     if (
@@ -300,7 +300,7 @@ export const setAudioAnswer = asyncHandler(
       throw new Error("Please provide a valid question ID");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -355,7 +355,7 @@ export const setAudioAnswer = asyncHandler(
 // @access  Private
 export const getAnsweredQuestions = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
     if (!user) {
       res.status(404);
@@ -372,7 +372,7 @@ export const getAnsweredQuestions = asyncHandler(
 
 export const setSkippedQuestion = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { questionId } = req.body;
 
     if (!questionId || questionId.trim() === "") {
@@ -403,7 +403,7 @@ export const setSkippedQuestion = asyncHandler(
 
 export const createAnswer = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const {
       question,
       jobResultId,
@@ -540,7 +540,7 @@ export const createAnswer = asyncHandler(
 // @access  Private
 export const getMatchQnAHistory = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { matchRecordId } = req.params;
 
     if (!matchRecordId) {
@@ -594,7 +594,7 @@ export const getMatchQnAHistory = asyncHandler(
 // @access  Private
 export const updateUserProfile = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { resume, socialLinks, phone, name } = req.body;
 
     // At least one field must be provided
@@ -736,7 +736,7 @@ export const skipJob = asyncHandler(async (req: Request, res: Response) => {
 // @access  Private
 export const getUserProfile = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -798,7 +798,7 @@ export const updateUserEmailAddress = asyncHandler(
       throw new Error("Please provide a valid email");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -828,7 +828,7 @@ export const updatePassword = asyncHandler(
       throw new Error("Please provide both old and new passwords");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -864,7 +864,7 @@ export const updateMinMatchScore = asyncHandler(
       throw new Error("Please provide a valid score between 0 and 100");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -886,7 +886,7 @@ export const updateMinMatchScore = asyncHandler(
 // @access  Private
 export const updatePreferences = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { location, remoteOnly, minSalary, jobTypes, industries, minScore } =
       req.body;
 
@@ -1010,7 +1010,7 @@ export const updatePreferences = asyncHandler(
 // @access  Private
 export const requestEmailChange = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { newEmail } = req.body;
 
     if (!newEmail || typeof newEmail !== "string" || newEmail.trim() === "") {
@@ -1137,7 +1137,7 @@ export const verifyEmailChange = asyncHandler(
 // @access  Private
 export const resendVerificationEmail = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -1223,7 +1223,7 @@ export const verifyInitialEmail = asyncHandler(
 // @access Private
 export const factoryResetUserAccount = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -1269,7 +1269,7 @@ export const factoryResetUserAccount = asyncHandler(
 // @access  Private
 export const deleteUserAccount = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -1335,7 +1335,7 @@ export const searchSkills = asyncHandler(
 // @access  Private
 export const getGuideProgress = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -1390,7 +1390,7 @@ export const updateGuideProgress = asyncHandler(
       throw new Error("Please provide either completed or skipped status");
     }
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -1443,7 +1443,7 @@ export const resetGuideProgress = asyncHandler(
   async (req: Request, res: Response) => {
     const { pageId } = req.body;
 
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const user = await User.findById(userId);
 
     if (!user) {

@@ -10,7 +10,7 @@ import ChatMemory from "../models/ChatMemory";
 // @access  Private
 export const sendMessage = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
     const { message, conversationId } = req.body;
 
     if (!message || typeof message !== "string" || message.trim() === "") {
@@ -46,7 +46,7 @@ export const sendMessage = expressAsyncHandler(
 // @access  Private
 export const getConversations = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     const conversations = await ChatConversation.find({ userId })
       .select("title createdAt updatedAt")
@@ -62,7 +62,7 @@ export const getConversations = expressAsyncHandler(
 // @access  Private
 export const getConversation = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
     const conversationId = req.params.id;
 
     const conversation = await ChatConversation.findOne({ _id: conversationId, userId });
@@ -81,7 +81,7 @@ export const getConversation = expressAsyncHandler(
 // @access  Private
 export const getMemory = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     const memory = await ChatMemory.findOne({ userId });
 
@@ -94,7 +94,7 @@ export const getMemory = expressAsyncHandler(
 // @access  Private
 export const deleteMemory = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     await ChatMemory.deleteOne({ userId });
 

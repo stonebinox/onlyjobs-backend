@@ -3,15 +3,6 @@ import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import User from "../models/User";
 
-// Extend Express Request type to include user
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-    }
-  }
-}
-
 export const protect = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
     let token;
@@ -28,10 +19,16 @@ export const protect = asyncHandler(
         const decoded = jwt.verify(token, process.env.JWT_SECRET!);
 
         // Get user from the token
-        req.user = await User.findById({
+        const foundUser = await User.findById({
           _id: (decoded as any).id,
         }).select("-password");
 
+        if (!foundUser) {
+          res.status(401);
+          throw new Error("Not authorized, user not found");
+        }
+
+        req.user = foundUser;
         next();
       } catch (error) {
         console.error(error);

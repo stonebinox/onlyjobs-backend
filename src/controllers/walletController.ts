@@ -14,7 +14,7 @@ import {
  */
 export const getWalletBalance = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -34,7 +34,7 @@ export const getWalletBalance = asyncHandler(
 export const createPaymentOrder = asyncHandler(
   async (req: Request, res: Response) => {
     const { amount } = req.body;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     // Validate amount
     if (!amount || typeof amount !== "number" || amount < 1 || amount > 500) {
@@ -90,7 +90,7 @@ export const createPaymentOrder = asyncHandler(
 export const verifyAndCreditWallet = asyncHandler(
   async (req: Request, res: Response) => {
     const { orderId, paymentId, signature } = req.body;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     if (!orderId || !paymentId || !signature) {
       res.status(400);
@@ -150,7 +150,7 @@ export const verifyAndCreditWallet = asyncHandler(
  */
 export const getTransactions = asyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -193,7 +193,7 @@ export const checkBalance = async (userId: string): Promise<boolean> => {
 export const cancelPaymentOrder = asyncHandler(
   async (req: Request, res: Response) => {
     const { orderId, reason } = req.body;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     if (!orderId) {
       res.status(400);
@@ -239,7 +239,7 @@ export const cancelPaymentOrder = asyncHandler(
 export const handlePaymentFailure = asyncHandler(
   async (req: Request, res: Response) => {
     const { orderId, errorCode, errorDescription, errorReason } = req.body;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     if (!orderId) {
       res.status(400);
@@ -429,7 +429,7 @@ export const handleRazorpayWebhook = asyncHandler(
 export const syncTransactionStatus = asyncHandler(
   async (req: Request, res: Response) => {
     const { orderId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     if (!orderId) {
       res.status(400);

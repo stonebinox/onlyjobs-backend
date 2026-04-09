@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import mongoose from "mongoose";
 
 import { IUser } from "../models/User";
 import JobListing, { IJobListing } from "../models/JobListing";
@@ -94,7 +95,7 @@ Evaluate this match.`,
 };
 
 export const getMatchesData = async (
-  userId: string,
+  userId: string | mongoose.Types.ObjectId,
   minMatchScore: number = 0
 ) => {
   const fifteenDaysAgo = new Date();

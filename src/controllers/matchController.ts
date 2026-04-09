@@ -17,7 +17,7 @@ import { analyzeRejectionAndUpdatePreferences } from "../services/preferenceLear
 // @access  Private
 export const getMatches = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
     const { minMatchScore } = req.query;
     let minScore = 0;
 
@@ -38,7 +38,7 @@ export const getMatches = expressAsyncHandler(
 // @access  Private
 export const getMatchCount = expressAsyncHandler(
   async (req: Request, res: Response) => {
-    const userId = req.user._id;
+    const userId = req.user!._id;
     const fifteenDaysAgo = new Date();
     fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
     const matchCount = await MatchRecord.countDocuments({
@@ -188,7 +188,7 @@ export const recordApplicationOutcome = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
     const { outcome } = req.body;
-    const userId = req.user._id;
+    const userId = req.user!._id;
 
     const validOutcomes = ['heard_back', 'no_response', 'rejected', 'interview', 'offer'];
     if (!outcome || !validOutcomes.includes(outcome)) {
