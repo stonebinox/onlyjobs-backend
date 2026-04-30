@@ -13,6 +13,16 @@ export interface MatchSummaryItem {
 
 let resendClient: Resend | null = null;
 
+const emailPauseFooter = (frontendUrl: string): string => {
+  const settingsUrl = `${frontendUrl}/settings`;
+  return `
+    <p style="margin-top:32px; padding-top:16px; border-top:1px solid #e5e7eb; color:#9ca3af; font-size:12px; text-align:center;">
+      You're receiving this because you have an active onlyjobs account.
+      <a href="${settingsUrl}" style="color:#6b7280;">Pause matching</a> anytime from your settings.
+    </p>
+  `;
+};
+
 const ensureConfigured = () => {
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
@@ -267,8 +277,8 @@ export const sendMatchingEnabledEmail = async (user: IUser): Promise<boolean> =>
       <div style="margin-top:24px; text-align:center;">
         <a href="${dashboardUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Dashboard</a>
       </div>
-      <p style="margin-top:24px; color:#6b7280; font-size:14px;">You can pause matching anytime from your settings if needed.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
+      ${emailPauseFooter(frontendUrl)}
     </div>
   `;
 
@@ -329,6 +339,7 @@ export const sendMatchingDisabledEmail = async (user: IUser): Promise<boolean> =
       </div>
       <p style="margin-top:24px; color:#6b7280; font-size:14px;">When you're ready to resume, just toggle matching back on in your settings.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
+      ${emailPauseFooter(frontendUrl)}
     </div>
   `;
 
@@ -472,6 +483,7 @@ export const sendMatchSummaryEmail = async (
       </div>
       <p style="margin-top:24px; color:#6b7280; font-size:14px;">Jump back in to review details, save your favorites, or skip roles you're not interested in.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
+      ${emailPauseFooter(frontendUrl)}
     </div>
   `;
 
