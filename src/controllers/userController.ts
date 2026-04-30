@@ -1269,39 +1269,40 @@ export const searchSkills = asyncHandler(
     const query = req.query.q as string;
 
     if (!query || query.trim().length < 2) {
-      res.status(200).json({
-        skills: [],
-      });
+      res.status(200).json({ skills: [] });
       return;
     }
 
-    const searchTerm = query.trim().toLowerCase();
+    // Escape regex metacharacters in user input
+    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "i");
 
-    // Get all users and extract unique skills
-    const users = await User.find({
-      "resume.skills": { $exists: true, $ne: [] },
-    }).select("resume.skills");
+    const results = await User.aggregate([
+      { $unwind: "$resume.skills" },
+      // Strip rating suffix "(8/10)" before matching so search hits skill name only
+      {
+        $addFields: {
+          skillName: {
+            $trim: {
+              input: {
+                $regexReplace: {
+                  input: "$resume.skills",
+                  regex: "\\s*\\(\\d+\\/10\\)\\s*$",
+                  replacement: "",
+                },
+              },
+            },
+          },
+        },
+      },
+      { $match: { skillName: regex } },
+      { $group: { _id: "$skillName" } },
+      { $sort: { _id: 1 } },
+      { $limit: 10 },
+    ]);
 
-    // Extract all skills and normalize them (remove ratings for matching)
-    const skillSet = new Set<string>();
-    users.forEach((user) => {
-      if (user.resume?.skills) {
-        user.resume.skills.forEach((skill: string) => {
-          // Extract skill name without rating: "JavaScript (8)" -> "JavaScript"
-          const skillName = skill.replace(/\s*\(\d+\/10\)\s*$/, "").trim();
-          if (skillName.toLowerCase().includes(searchTerm)) {
-            skillSet.add(skillName);
-          }
-        });
-      }
-    });
-
-    // Convert to array and sort
-    const skills = Array.from(skillSet).sort();
-
-    res.status(200).json({
-      skills: skills.slice(0, 10), // Limit to 10 results
-    });
+    const skills = results.map((r: { _id: string }) => r._id);
+    res.status(200).json({ skills });
   }
 );
 
