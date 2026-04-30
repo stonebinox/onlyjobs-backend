@@ -14,7 +14,6 @@ import {
   createAnswer,
   getMatchQnAHistory,
   getUserProfile,
-  updateUserEmailAddress,
   updatePassword,
   updateMinMatchScore,
   factoryResetUserAccount,
@@ -62,7 +61,6 @@ router.get("/answers", protect, getAnsweredQuestions);
 router.post("/skip-question", protect, setSkippedQuestion);
 router.post("/create-answer", protect, createAnswer);
 router.get("/match-qna/:matchRecordId", protect, getMatchQnAHistory);
-router.put("/update-email", protect, updateUserEmailAddress);
 router.post("/email-change/request", protect, requestEmailChange);
 router.post("/email-change/verify", verifyEmailChange);
 router.post("/resend-verification", protect, resendVerificationEmail);

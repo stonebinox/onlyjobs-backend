@@ -62,13 +62,24 @@ export const getMatchCount = expressAsyncHandler(
 export const markMatchClick = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const { matchId } = req.body;
+    const userId = req.user!._id;
 
     if (!matchId) {
       res.status(400);
       throw new Error("Match ID is required");
     }
 
-    await markMatchAsClicked(matchId);
+    const match = await MatchRecord.findById(matchId);
+    if (!match) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+    if (match.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    await markMatchAsClicked(matchId, userId);
 
     res.json({ message: "Match marked as clicked" });
   }
@@ -77,6 +88,7 @@ export const markMatchClick = expressAsyncHandler(
 export const markMatchAsSkipped = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const { matchId, reason, details } = req.body;
+    const userId = req.user!._id;
 
     if (!matchId) {
       res.status(400);
@@ -87,7 +99,18 @@ export const markMatchAsSkipped = expressAsyncHandler(
     const reasonObj = reason ? { category: reason, details } : undefined;
 
     // Update the match record
-    const match = await skipMatch(matchId, reasonObj);
+    const existingMatch = await MatchRecord.findById(matchId);
+    if (!existingMatch) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+    if (existingMatch.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const match = (await skipMatch(matchId, userId, reasonObj))!;
 
     // If a reason was provided, trigger preference learning
     if (reasonObj) {
@@ -129,6 +152,7 @@ export const markMatchAsSkipped = expressAsyncHandler(
 export const markMatchApplied = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const { matchId, applied, reason, details } = req.body;
+    const userId = req.user!._id;
 
     if (!matchId) {
       res.status(400);
@@ -145,7 +169,18 @@ export const markMatchApplied = expressAsyncHandler(
       !applied && reason ? { category: reason, details } : undefined;
 
     // Update the match record
-    const match = await markMatchAppliedStatus(matchId, applied, reasonObj);
+    const existingMatch = await MatchRecord.findById(matchId);
+    if (!existingMatch) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+    if (existingMatch.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const match = (await markMatchAppliedStatus(matchId, userId, applied, reasonObj))!;
 
     // If user said "No" with a reason, trigger preference learning
     if (!applied && reasonObj) {

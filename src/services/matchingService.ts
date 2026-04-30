@@ -124,25 +124,26 @@ export const getMatchesData = async (
   return sortedMatches;
 };
 
-export const markMatchAsClicked = async (matchId: string) => {
+export const markMatchAsClicked = async (matchId: string, userId: string | mongoose.Types.ObjectId) => {
   const match = await MatchRecord.findById(matchId);
 
-  if (!match) throw new Error("Match not found");
+  if (!match) return null;
 
   match.clicked = true;
   match.skipped = false; // Reset skipped status
   await match.save();
 
-  return true;
+  return match;
 };
 
 export const skipMatch = async (
   matchId: string,
+  userId: string | mongoose.Types.ObjectId,
   reason?: { category: string; details?: string }
 ) => {
   const match = await MatchRecord.findById(matchId);
 
-  if (!match) throw new Error("Match not found");
+  if (!match) return null;
 
   match.skipped = true;
 
@@ -161,12 +162,13 @@ export const skipMatch = async (
 
 export const markMatchAppliedStatus = async (
   matchId: string,
+  userId: string | mongoose.Types.ObjectId,
   applied: boolean,
   reason?: { category: string; details?: string }
 ) => {
   const match = await MatchRecord.findById(matchId);
 
-  if (!match) throw new Error("Match not found");
+  if (!match) return null;
 
   if (applied === true && match.applied !== true) {
     match.appliedAt = new Date();
