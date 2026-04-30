@@ -141,8 +141,19 @@ describe('chatService.checkRateLimit', () => {
     expect(result).toBe(true);
   });
 
-  it('returns false when at 20 messages in the last hour', async () => {
+  it('returns true when under 50 messages in the last hour', async () => {
     const messages = Array.from({ length: 20 }, (_, i) => ({
+      role: 'user' as const,
+      content: `Message ${i}`,
+      createdAt: new Date(),
+    }));
+    await ChatConversation.create({ userId: testUserId, title: 'Rate limit test', messages });
+    const result = await checkRateLimit(testUserId.toString());
+    expect(result).toBe(true);
+  });
+
+  it('returns false when at 50 messages in the last hour', async () => {
+    const messages = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,
       content: `Message ${i}`,
       createdAt: new Date(),
@@ -255,7 +266,7 @@ describe('chat controller', () => {
   });
 
   it('POST /api/chat returns 429 when rate limited', async () => {
-    const messages = Array.from({ length: 20 }, (_, i) => ({
+    const messages = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,
       content: `Message ${i}`,
       createdAt: new Date(),
