@@ -106,17 +106,18 @@ export const getMatchesData = async (
     createdAt: { $gte: fifteenDaysAgo },
   }).sort({ createdAt: -1 });
 
-  const matchPromises = matches.map(async (match) => {
-    const job = await JobListing.findById(match.jobId);
-    const populatedMatch = {
-      ...match.toObject(),
-      job,
-    };
+  const jobIds = matches.map((m) => m.jobId);
+  const jobs = await JobListing.find({ _id: { $in: jobIds } });
+  const jobMap = new Map(jobs.map((j) => [(j._id as mongoose.Types.ObjectId).toString(), j]));
 
-    return populatedMatch;
-  });
+  const populatedMatches = matches
+    .map((match) => {
+      const job = jobMap.get(match.jobId.toString());
+      if (!job) return null;
+      return { ...match.toObject(), job };
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 
-  const populatedMatches = await Promise.all(matchPromises);
   const sortedMatches = populatedMatches.sort(
     (a, b) => b.matchScore - a.matchScore
   );
