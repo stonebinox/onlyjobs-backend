@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import {
   authenticateUser,
   getUserName,
@@ -37,10 +38,26 @@ import audioUpload from "../middleware/audioUpload";
 
 const router = express.Router();
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const sensitiveActionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Public routes
-router.post("/auth", authenticateUser);
+router.post("/auth", authLimiter, authenticateUser);
 router.post("/forgot-password", requestPasswordReset);
-router.post("/reset-password", resetPasswordWithToken);
+router.post("/reset-password", sensitiveActionLimiter, resetPasswordWithToken);
 
 // Protected routes
 router.get("/username", protect, getUserName);
@@ -61,7 +78,7 @@ router.get("/answers", protect, getAnsweredQuestions);
 router.post("/skip-question", protect, setSkippedQuestion);
 router.post("/create-answer", protect, createAnswer);
 router.get("/match-qna/:matchRecordId", protect, getMatchQnAHistory);
-router.post("/email-change/request", protect, requestEmailChange);
+router.post("/email-change/request", sensitiveActionLimiter, protect, requestEmailChange);
 router.post("/email-change/verify", verifyEmailChange);
 router.post("/resend-verification", protect, resendVerificationEmail);
 router.post("/verify-email", verifyInitialEmail);

@@ -16,9 +16,16 @@ dotenv.config();
 connectDB();
 
 const app = express();
+app.set("trust proxy", 1);
 
 // Middleware
-app.use(cors());
+const allowedOrigin = process.env.FRONTEND_URL;
+app.use(cors({
+  origin: process.env.NODE_ENV === "production"
+    ? allowedOrigin || false
+    : true,
+  credentials: true,
+}));
 
 // Configure express to handle larger payloads for file uploads
 app.use(
