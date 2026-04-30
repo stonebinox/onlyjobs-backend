@@ -49,7 +49,7 @@ const validateStringArray = (fieldName: string, value: unknown) => {
 
 export const authenticateUser = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
 
     if (
       !email ||
@@ -61,6 +61,8 @@ export const authenticateUser = asyncHandler(
       res.status(400);
       throw new Error("Please provide valid email and password");
     }
+
+    email = email.trim().toLowerCase();
 
     // we find user by email to see if one exists
     let user = await findUserByEmail(email);
