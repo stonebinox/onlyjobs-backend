@@ -6,7 +6,6 @@ import {
   getActiveUserCount,
   updateUserCV,
   updateUserProfile,
-  skipJob,
   getQuestion,
   setUserAnswer,
   setAudioAnswer,
@@ -90,8 +89,5 @@ router.delete("/delete", protect, deleteUserAccount);
 router.get("/guide-progress", protect, getGuideProgress);
 router.put("/guide-progress", protect, updateGuideProgress);
 router.post("/guide-progress/reset", protect, resetGuideProgress);
-
-// Unused routes
-router.post("/skip/:jobId", protect, skipJob);
 
 export default router;

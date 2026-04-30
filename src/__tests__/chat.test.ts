@@ -1,8 +1,12 @@
-// OpenAI mock must be declared before importing chatService
-jest.mock('openai', () => ({
-  __esModule: true,
-  default: jest.fn(),
-}));
+// OpenAI mock must be declared before importing chatService (module-level singleton compatible)
+jest.mock('openai', () => {
+  const mockCreate = jest.fn();
+  const MockConstructor = jest.fn().mockReturnValue({
+    chat: { completions: { create: mockCreate } },
+  });
+  (MockConstructor as any).__mockCreate = mockCreate;
+  return { __esModule: true, default: MockConstructor };
+});
 
 jest.mock('../middleware/authMiddleware', () => ({
   protect: (_req: any, _res: any, next: any) => next(),
@@ -44,10 +48,9 @@ testApp.use((err: any, _req: express.Request, res: express.Response, _next: expr
 
 beforeEach(() => {
   testUserId = new mongoose.Types.ObjectId();
-  mockCreate = jest.fn().mockResolvedValue(defaultMockResponse);
-  MockOpenAI.mockImplementation(() => ({
-    chat: { completions: { create: mockCreate } },
-  }));
+  mockCreate = (MockOpenAI as any).__mockCreate as jest.Mock;
+  mockCreate.mockClear();
+  mockCreate.mockResolvedValue(defaultMockResponse);
 });
 
 // ---------------------------------------------------------------------------

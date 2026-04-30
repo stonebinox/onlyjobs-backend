@@ -1,8 +1,12 @@
-// OpenAI mock must be declared before importing matchingService
-jest.mock('openai', () => ({
-  __esModule: true,
-  default: jest.fn(),
-}));
+// OpenAI mock must be declared before importing matchingService (module-level singleton compatible)
+jest.mock('openai', () => {
+  const mockCreate = jest.fn();
+  const MockConstructor = jest.fn().mockReturnValue({
+    chat: { completions: { create: mockCreate } },
+  });
+  (MockConstructor as any).__mockCreate = mockCreate;
+  return { __esModule: true, default: MockConstructor };
+});
 
 jest.mock('../services/userService', () => ({
   getUserQnA: jest.fn().mockResolvedValue([]),
@@ -185,19 +189,13 @@ describe('markMatchAppliedStatus', () => {
 
 describe('matchUserToJob', () => {
   beforeEach(() => {
-    MockOpenAI.mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: jest.fn().mockResolvedValue({
-            choices: [{
-              message: {
-                content: '{"matchScore": 75, "verdict": "Good match", "reasoning": "Strong skills match"}',
-              },
-            }],
-          }),
+    (MockOpenAI as any).__mockCreate.mockResolvedValue({
+      choices: [{
+        message: {
+          content: '{"matchScore": 75, "verdict": "Good match", "reasoning": "Strong skills match"}',
         },
-      },
-    }));
+      }],
+    });
   });
 
   it('returns a numeric match score between 0 and 100', async () => {

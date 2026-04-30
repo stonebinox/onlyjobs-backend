@@ -1,5 +1,11 @@
 process.env.JWT_SECRET = 'test-jwt-secret';
 
+// Mock OpenAI before any imports to prevent module-level instantiation errors
+jest.mock('openai', () => ({
+  __esModule: true,
+  default: jest.fn().mockReturnValue({}),
+}));
+
 // Mock bcrypt before any imports to avoid native binary architecture issues.
 // The mock is deterministic: hash(pw) => "hashed_<pw>", compare(pw, hash) => hash === "hashed_<pw>"
 jest.mock('bcrypt', () => ({

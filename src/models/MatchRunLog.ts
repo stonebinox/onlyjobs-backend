@@ -13,7 +13,7 @@ export enum MatchRunOutcome {
 export interface IMatchRunLog extends Document {
   userId: mongoose.Types.ObjectId;
   runAt: Date;
-  outcome: string;
+  outcome: MatchRunOutcome;
   totalJobsAvailable: number;
   totalNewJobs: number;
   preFilterResults: {

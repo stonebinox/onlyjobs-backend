@@ -1,3 +1,9 @@
+// Mock OpenAI before any imports to prevent module-level instantiation errors
+jest.mock('openai', () => ({
+  __esModule: true,
+  default: jest.fn().mockReturnValue({}),
+}));
+
 jest.mock('../middleware/authMiddleware', () => ({
   protect: (_req: any, _res: any, next: any) => next(),
 }));

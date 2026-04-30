@@ -4,6 +4,8 @@ import User, { IUser } from "../models/User";
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord, RejectionReason } from "../models/MatchRecord";
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 // Reason categories that should NOT be used for learning
 const NON_LEARNING_CATEGORIES = ["job_inactive"];
 
@@ -50,8 +52,6 @@ export const analyzeRejectionAndUpdatePreferences = async (
     );
     return null;
   }
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const existingInsights = user.learnedPreferences?.insights || "None yet.";
   const existingFeedbackCount = user.learnedPreferences?.feedbackCount || 0;

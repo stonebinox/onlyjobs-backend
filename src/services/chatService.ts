@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import mongoose from "mongoose";
 import ChatConversation from "../models/ChatConversation";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 import ChatMemory from "../models/ChatMemory";
 import MatchRunLog from "../models/MatchRunLog";
 import MatchRecord from "../models/MatchRecord";
@@ -367,7 +369,7 @@ async function summarizeOlderMessages(
     : conversationText;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: process.env.GPT_MODEL || "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -408,8 +410,6 @@ export async function processMessage(
   // Load memory
   const memory = await ChatMemory.findOne({ userId: userObjectId }).lean();
   const memoryEntries = memory?.entries ?? [];
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   // Build OpenAI messages (last CONVERSATION_CUTOFF only, with AI summary if conversation is longer)
   const allMessages = conversation.messages;

@@ -726,16 +726,6 @@ export const updateUserProfile = asyncHandler(
   }
 );
 
-// @desc    Skip a job (don't show it again)
-// @route   POST /api/users/skip/:jobId
-// @access  Private
-export const skipJob = asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Implement job skipping logic
-  res.json({
-    message: "Job skipped successfully",
-  });
-});
-
 // @desc    Get user profile
 // @route   GET /api/users/profile
 // @access  Private
@@ -931,26 +921,22 @@ export const updatePreferences = asyncHandler(
 
         // Send email if matching status changed
         if (previousMatchingEnabled !== newMatchingEnabled) {
-          // Reload user after save to get fresh data, then send email
           await user.save();
-          const updatedUser = await User.findById(userId);
-          if (updatedUser) {
-            if (newMatchingEnabled) {
-              // Matching enabled - send welcome back email
-              try {
-                await sendMatchingEnabledEmail(updatedUser);
-              } catch (err) {
-                console.error("Failed to send matching enabled email", err);
-                // Don't fail the request if email fails
-              }
-            } else {
-              // Matching disabled - send confirmation email
-              try {
-                await sendMatchingDisabledEmail(updatedUser);
-              } catch (err) {
-                console.error("Failed to send matching disabled email", err);
-                // Don't fail the request if email fails
-              }
+          if (newMatchingEnabled) {
+            // Matching enabled - send welcome back email
+            try {
+              await sendMatchingEnabledEmail(user);
+            } catch (err) {
+              console.error("Failed to send matching enabled email", err);
+              // Don't fail the request if email fails
+            }
+          } else {
+            // Matching disabled - send confirmation email
+            try {
+              await sendMatchingDisabledEmail(user);
+            } catch (err) {
+              console.error("Failed to send matching disabled email", err);
+              // Don't fail the request if email fails
             }
           }
         } else {
@@ -960,16 +946,9 @@ export const updatePreferences = asyncHandler(
         await user.save();
       }
 
-      // Reload user to get latest state
-      const finalUser = await User.findById(userId);
-      if (!finalUser) {
-        res.status(404);
-        throw new Error("User not found");
-      }
-
       res.status(200).json({
         message: "Preferences updated successfully",
-        preferences: finalUser.preferences,
+        preferences: user.preferences,
       });
     } catch (error) {
       if (error instanceof Error) {

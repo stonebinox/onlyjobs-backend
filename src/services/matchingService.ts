@@ -7,6 +7,8 @@ import MatchRecord, { Freshness } from "../models/MatchRecord";
 import { jobMatcherPrompt } from "../utils/jobMatcherPrompt";
 import { getUserQnA } from "./userService";
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 interface MatchResult {
   matchScore: number;
   verdict: string;
@@ -35,7 +37,6 @@ export const matchUserToJob = async (
   job: IJobListing,
   preloadedQnA?: UserQnAData
 ): Promise<MatchResult> => {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   // Use pre-loaded QnA if provided, otherwise fetch it
   const answeredQuestions = preloadedQnA ?? (await getUserQnA(user));
 

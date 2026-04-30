@@ -16,6 +16,8 @@ import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstruc
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord } from "../models/MatchRecord";
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
 };
@@ -34,7 +36,6 @@ const unlinkAsync = promisify(fs.unlink);
 const MAX_TOKENS = 80000;
 
 export const parseUserCV = async (uploadedFilePath: string) => {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
     const ext = path.extname(uploadedFilePath).toLowerCase();
@@ -88,7 +89,6 @@ export const parseUserCV = async (uploadedFilePath: string) => {
 };
 
 export const getAIQuestion = async (user: IUser) => {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const answers = user.qna || [];
   const partialUserData = user.toObject();
   delete partialUserData._id;
@@ -145,7 +145,6 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
   delete partialUserData.updatedAt;
   delete partialUserData.isVerified;
   delete partialUserData.qna;
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const aiContent = getAnswersInstructions(
     answer,
     questions,
@@ -207,7 +206,6 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
 };
 
 export const parseAudioAnswer = async (audioBuffer: ReadStream) => {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
     const response = await openai.audio.transcriptions.create({
@@ -315,7 +313,6 @@ export const getAnswerForQuestion = async (
     }));
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
     const response = await openai.chat.completions.create({
