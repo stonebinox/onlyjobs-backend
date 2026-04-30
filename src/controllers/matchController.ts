@@ -219,3 +219,66 @@ export const recordApplicationOutcome = expressAsyncHandler(
     res.json({ message: "Application outcome recorded", outcome });
   }
 );
+
+// @desc    Trigger on-demand job matching for the authenticated user
+// @route   POST /api/matches/trigger-for-me
+// @access  Private
+export const triggerMatchForMe = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id.toString();
+    const user = await User.findById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    if (user.lastManualMatchAt && Date.now() - user.lastManualMatchAt.getTime() < SIX_HOURS_MS) {
+      const retryAfterMinutes = Math.ceil(
+        (user.lastManualMatchAt.getTime() + SIX_HOURS_MS - Date.now()) / 60000
+      );
+      res.status(429).json({
+        message: `Please wait before triggering another match run.`,
+        retryAfterMinutes,
+      });
+      return;
+    }
+
+    const backgroundUrl = process.env.BACKGROUND_SERVICE_URL || "http://localhost:5001";
+    const secret = process.env.INTERNAL_TRIGGER_SECRET;
+
+    if (!secret) {
+      console.error("[TRIGGER] INTERNAL_TRIGGER_SECRET not configured");
+      res.status(503).json({ message: "Matching service not configured" });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${backgroundUrl}/internal/match-for-user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Secret": secret,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[TRIGGER] Background service error: ${errText}`);
+        res.status(502).json({ message: "Failed to start matching" });
+        return;
+      }
+    } catch (fetchErr) {
+      console.error("[TRIGGER] Could not reach background service:", fetchErr);
+      res.status(502).json({ message: "Matching service unreachable" });
+      return;
+    }
+
+    // Only update cooldown after confirmed dispatch
+    await User.findByIdAndUpdate(userId, { lastManualMatchAt: new Date() });
+    console.log(`[TRIGGER] Match run started for user ${userId}`);
+    res.status(202).json({ message: "Match run started — results will appear in a few minutes" });
+  }
+);

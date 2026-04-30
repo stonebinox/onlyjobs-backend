@@ -55,6 +55,7 @@ export interface IUser extends Document {
   passwordResetToken?: string;
   passwordResetExpires?: Date;
   lastLoginAt?: Date;
+  lastManualMatchAt?: Date;
   guideProgress?: Map<
     string,
     {
@@ -125,6 +126,7 @@ const UserSchema: Schema = new Schema(
     passwordResetToken: { type: String },
     passwordResetExpires: { type: Date },
     lastLoginAt: { type: Date },
+    lastManualMatchAt: { type: Date },
     guideProgress: {
       type: Map,
       of: {

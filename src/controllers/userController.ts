@@ -64,6 +64,7 @@ export const authenticateUser = asyncHandler(
 
     // we find user by email to see if one exists
     let user = await findUserByEmail(email);
+    let isNewUser = false;
     const encryptedPassword = await bcrypt.hash(password, saltRounds);
 
     if (!user) {
@@ -104,6 +105,7 @@ export const authenticateUser = asyncHandler(
         },
       });
 
+      isNewUser = true;
       // Send verification email to new user
       await sendInitialVerificationEmail(user.email, verificationToken);
     } else {
@@ -126,6 +128,7 @@ export const authenticateUser = asyncHandler(
     res.status(200).json({
       id: user.id,
       token: token,
+      isNewUser,
     });
   }
 );
