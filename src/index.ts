@@ -20,9 +20,12 @@ app.set("trust proxy", 1);
 
 // Middleware
 const allowedOrigin = process.env.FRONTEND_URL;
+if (process.env.NODE_ENV === "production" && !allowedOrigin) {
+  console.warn("WARNING: FRONTEND_URL is not set — CORS is open in production");
+}
 app.use(cors({
   origin: process.env.NODE_ENV === "production"
-    ? allowedOrigin || false
+    ? allowedOrigin || true
     : true,
   credentials: true,
 }));
