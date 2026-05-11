@@ -14,6 +14,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   phone?: string;
+  currentLocation?: string;
   resume: {
     skills: string[];
     experience: (string | { text: string; link?: string })[];
@@ -73,6 +74,7 @@ const UserSchema: Schema = new Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String, required: false },
+    currentLocation: { type: String, trim: true },
     resume: {
       skills: [String],
       experience: [Schema.Types.Mixed], // Support both string and { text: string, link?: string }

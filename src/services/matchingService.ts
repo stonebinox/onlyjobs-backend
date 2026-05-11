@@ -50,6 +50,7 @@ export const matchUserToJob = async (
     })),
     // Include learned preferences if available (from previous job rejections)
     learnedPreferences: user.learnedPreferences?.insights || null,
+    currentLocation: user.currentLocation || null,
   };
 
   const jobInfo = {

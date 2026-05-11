@@ -600,10 +600,10 @@ export const getMatchQnAHistory = asyncHandler(
 export const updateUserProfile = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { resume, socialLinks, phone, name } = req.body;
+    const { resume, socialLinks, phone, name, currentLocation } = req.body;
 
     // At least one field must be provided
-    if (!resume && socialLinks === undefined && phone === undefined && name === undefined) {
+    if (!resume && socialLinks === undefined && phone === undefined && name === undefined && currentLocation === undefined) {
       res.status(400);
       throw new Error("Please provide at least one field to update");
     }
@@ -637,6 +637,16 @@ export const updateUserProfile = asyncHandler(
         throw new Error("name must be a string");
       }
       user.name = name;
+    }
+
+    // Update currentLocation if provided
+    if (currentLocation !== undefined) {
+      if (typeof currentLocation !== "string") {
+        res.status(400);
+        throw new Error("currentLocation must be a string");
+      }
+      const trimmed = currentLocation.trim();
+      user.currentLocation = trimmed === "" ? undefined : trimmed;
     }
 
     // Handle resume updates if provided
@@ -717,6 +727,7 @@ export const updateUserProfile = asyncHandler(
         name: user.name,
         email: user.email,
         phone: user.phone,
+        currentLocation: user.currentLocation,
         preferences: user.preferences,
         resume: user.resume,
         socialLinks: user.socialLinks,
@@ -769,6 +780,7 @@ export const getUserProfile = asyncHandler(
         name: user.name,
         email: user.email,
         phone: user.phone,
+        currentLocation: user.currentLocation,
         preferences: user.preferences,
         resume: user.resume,
         socialLinks: user.socialLinks,
