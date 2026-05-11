@@ -107,6 +107,7 @@ export const getAllJobs = asyncHandler(async (req: Request, res: Response) => {
             reasoning: match.reasoning,
             skipped: match.skipped,
             applied: match.applied,
+            updatedAt: match.updatedAt,
           }
         : null,
     };
@@ -227,6 +228,7 @@ export const matchJobOnDemand = asyncHandler(async (req: Request, res: Response)
       reasoning: matchRecord.reasoning,
       skipped: matchRecord.skipped,
       applied: matchRecord.applied,
+      updatedAt: matchRecord.updatedAt,
     },
   });
 });
