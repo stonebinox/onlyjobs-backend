@@ -1270,29 +1270,24 @@ export const searchSkills = asyncHandler(
 
     const results = await User.aggregate([
       { $unwind: "$resume.skills" },
-      // Strip rating suffix "(8/10)" before matching so search hits skill name only
-      {
-        $addFields: {
-          skillName: {
-            $trim: {
-              input: {
-                $regexReplace: {
-                  input: "$resume.skills",
-                  regex: "\\s*\\(\\d+\\/10\\)\\s*$",
-                  replacement: "",
-                },
-              },
-            },
-          },
-        },
-      },
-      { $match: { skillName: regex } },
-      { $group: { _id: "$skillName" } },
+      { $match: { "resume.skills": regex } },
+      { $group: { _id: "$resume.skills" } },
       { $sort: { _id: 1 } },
-      { $limit: 10 },
+      { $limit: 50 },
     ]);
 
-    const skills = results.map((r: { _id: string }) => r._id);
+    // Strip rating suffix "(8/10)" in JS and deduplicate
+    const seen = new Set<string>();
+    const skills: string[] = [];
+    for (const r of results as { _id: string }[]) {
+      const name = r._id.replace(/\s*\(\d+\/10\)\s*$/, "").trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        skills.push(name);
+        if (skills.length === 10) break;
+      }
+    }
+    skills.sort();
     res.status(200).json({ skills });
   }
 );
