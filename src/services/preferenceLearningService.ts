@@ -17,21 +17,31 @@ interface AnalysisResult {
 const buildPreferenceLearningPrompt = (): string => {
   return `You are an AI assistant that helps improve job matching by learning from user feedback.
 
-When a user says "No" to a matched job (meaning they chose not to apply after reviewing it), you need to analyze their reason and update their preference insights.
+When a user rejects a matched job, they provide a reason category and optional details text. Your job is to update their preference insights based on what the rejection actually reveals.
 
-Your task:
-1. Analyze the user's reason for not applying
-2. Consider the context: their profile, the job details, and their existing learned preferences
-3. Generate an updated "insights" string that captures what we've learned about this user's preferences
+CRITICAL RULE: The reason category is the PRIMARY signal. It tells you WHY the user rejected the job. Only learn about the aspect of the job that matches the reason — do NOT draw conclusions about unrelated attributes.
 
-The insights string should be:
-- Concise but comprehensive (max 200 words)
+Reason category → what to learn:
+- "location": Learn about location/region constraints (e.g., can't work US-only remote roles). Do NOT learn anything about the job's role type, title, or tech stack.
+- "salary": Learn about compensation expectations. Do NOT learn anything about the job's role type.
+- "company_type": Learn about company size/stage preferences. Do NOT learn anything about the job's role type.
+- "role_mismatch": Learn about role/job-type preferences (e.g., prefers SRE over generic DevOps). This is the only category where you should update role-related insights.
+- "skills_gap": Learn about what the user considers outside their current skill set.
+- "other": Read the user's details text carefully to determine what the actual preference is.
+
+NEVER generalize from the job's title, tech stack, or description when the reason is "location", "salary", or "company_type". Those are properties of this specific listing, not signals about role preferences.
+
+When updating existing insights:
+- Preserve insights that are still valid and unrelated to the current rejection's category.
+- Only modify or add insights related to the current rejection's reason category.
+
+The updated insights string must be:
+- Concise (max 200 words)
 - Written as factual statements about user preferences
-- Focused on actionable patterns that can improve future matching
-- Updated to incorporate the new feedback while preserving relevant existing insights
+- Actionable for future job matching
 
 Example insights format:
-"Prefers fully remote roles. Avoids early-stage startups (under 50 employees). Minimum salary expectation around $150k. Not interested in roles requiring travel >10%. Prefers product-focused companies over agencies."
+"Cannot work US-only remote roles (based in Uruguay). Minimum salary expectation around $150k. Avoids early-stage startups under 50 employees. Prefers SRE roles over generic DevOps titles."
 
 Respond with a JSON object:
 {
