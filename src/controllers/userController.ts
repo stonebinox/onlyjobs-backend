@@ -1398,6 +1398,19 @@ export const updateGuideProgress = asyncHandler(
   }
 );
 
+// @desc    Touch user session (update lastLoginAt)
+// @route   POST /api/users/session/touch
+// @access  Private
+export const touchSession = asyncHandler(
+  async (req: Request, res: Response) => {
+    await User.updateOne(
+      { _id: req.user!.id },
+      { $set: { lastLoginAt: new Date() } }
+    );
+    res.status(204).send();
+  }
+);
+
 // @desc    Reset user guide progress
 // @route   POST /api/users/guide-progress/reset
 // @access  Private

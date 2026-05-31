@@ -29,6 +29,7 @@ import {
   resetGuideProgress,
   requestPasswordReset,
   resetPasswordWithToken,
+  touchSession,
 } from "../controllers/userController";
 
 import { protect } from "../middleware/authMiddleware";
@@ -89,5 +90,6 @@ router.delete("/delete", protect, deleteUserAccount);
 router.get("/guide-progress", protect, getGuideProgress);
 router.put("/guide-progress", protect, updateGuideProgress);
 router.post("/guide-progress/reset", protect, resetGuideProgress);
+router.post("/session/touch", protect, touchSession);
 
 export default router;
