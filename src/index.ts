@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 
-import connectDB from "./utils/connectDB";
+import connectDB, { isDbConnected } from "./utils/connectDB";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import matchRoutes from "./routes/matchRoutes";
@@ -50,7 +50,12 @@ app.use("/api/chat", chatRoutes);
 
 // Basic health check route
 app.get("/healthcheck", (req, res) => {
-  res.send("API is running...");
+  res.json({
+    status: "ok",
+    service: "backend",
+    db: isDbConnected() ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Error handler middleware
