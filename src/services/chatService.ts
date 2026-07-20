@@ -8,6 +8,7 @@ import MatchRunLog from "../models/MatchRunLog";
 import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
 import FieldProfile from "../models/FieldProfile";
+import { questions } from "../utils/questions";
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
@@ -38,7 +39,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_user_profile_summary",
-      description: "Retrieve a summary of the user's profile including skills, experience, and preferences.",
+      description: "Retrieve the user's COMPLETE profile: name, skills, full work experience, education, certifications, languages, projects, achievements, volunteer experience, interests, job preferences, learned preferences, location, social links, resume summary, AND all of their Q&A answers (including voice-transcribed answers). Call this whenever the user asks anything about their own profile, resume, preferences, or Q&A.",
       parameters: {
         type: "object",
         properties: {},
@@ -137,7 +138,9 @@ OnlyJobs works like this:
 
 Your personality: friendly, concise, and actionable. Give specific advice the user can act on. Avoid vague suggestions.
 
-When you learn something important about the user (their target role, salary expectations, preferred industries, frustrations, goals), use the save_memory tool to remember it for future conversations. Use save_memory when you learn something new about the user. Use update_memory when you need to correct or update an existing memory.`;
+When you learn something important about the user (their target role, salary expectations, preferred industries, frustrations, goals), use the save_memory tool to remember it for future conversations. Use save_memory when you learn something new about the user. Use update_memory when you need to correct or update an existing memory.
+
+You have full access to the user's complete profile AND their Q&A answers through the get_user_profile_summary tool. Whenever the user asks about their profile, resume, skills, experience, preferences, or Q&A answers, call get_user_profile_summary first and answer from the returned data. NEVER tell the user you cannot access their Q&A or profile — you can. Only say a piece of information is missing if the tool returns it empty.`;
 
   if (memoryEntries.length > 0) {
     prompt += `\n\nWhat I know about you:\n`;
@@ -200,17 +203,44 @@ async function executeToolCall(
     const user = await User.findById(userObjectId).lean();
     if (!user) return { error: "User not found" };
 
-    const experience = (user.resume?.experience ?? []).slice(0, 5).map((e) =>
-      typeof e === "string" ? e : e.text
-    );
+    const normalizeEntry = (e: string | { text: string; link?: string }): string => {
+      if (typeof e === "string") return e;
+      return e.link ? `${e.text} (${e.link})` : e.text;
+    };
+
+    const questionsAndAnswers = (user.qna ?? []).map((item) => {
+      const q = questions.find((qq) => qq.id === item.questionId);
+      return {
+        question: q ? q.question : item.questionId,
+        category: q ? q.category : "unknown",
+        answer: item.answer,
+        mode: item.mode,
+        skipped: item.skipped === true,
+      };
+    });
+
+    const answeredCount = (user.qna ?? []).filter(
+      (item) => item.skipped !== true && item.answer && item.answer.trim() !== ""
+    ).length;
 
     return {
       name: user.name,
-      skills: user.resume?.skills ?? [],
-      experience,
-      preferences: user.preferences,
       summary: user.resume?.summary ?? "",
+      skills: user.resume?.skills ?? [],
+      experience: (user.resume?.experience ?? []).map(normalizeEntry),
+      education: user.resume?.education ?? [],
+      certifications: user.resume?.certifications ?? [],
+      languages: user.resume?.languages ?? [],
+      projects: (user.resume?.projects ?? []).map(normalizeEntry),
+      achievements: user.resume?.achievements ?? [],
+      volunteerExperience: user.resume?.volunteerExperience ?? [],
+      interests: user.resume?.interests ?? [],
+      preferences: user.preferences,
+      learnedPreferences: user.learnedPreferences?.insights ?? "",
+      currentLocation: user.currentLocation ?? "",
       socialLinks: user.socialLinks ?? {},
+      questionsAndAnswers,
+      answeredCount,
     };
   }
 
@@ -490,9 +520,9 @@ export async function processMessage(
       let toolResult: unknown;
       try {
         const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
-        console.log(`[Chat] Tool call: ${toolCall.function.name}(${toolCall.function.arguments})`);
+        console.log(`[Chat] Tool call: ${toolCall.function.name}`);
         toolResult = await withTimeout(executeToolCall(userId, String(conversation._id), toolCall.function.name, args), 15000, toolCall.function.name);
-        console.log(`[Chat] Tool result: ${JSON.stringify(toolResult).substring(0, 200)}`);
+        console.log(`[Chat] Tool result: ${toolCall.function.name} (${JSON.stringify(toolResult).length} chars)`);
       } catch (err) {
         toolResult = { error: `Tool execution failed: ${err instanceof Error ? err.message : String(err)}` };
       }

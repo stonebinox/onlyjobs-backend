@@ -18,6 +18,7 @@ import request from 'supertest';
 import express from 'express';
 import ChatConversation from '../models/ChatConversation';
 import ChatMemory from '../models/ChatMemory';
+import User from '../models/User';
 import { processMessage, checkRateLimit } from '../services/chatService';
 import chatRoutes from '../routes/chatRoutes';
 
@@ -315,5 +316,78 @@ describe('chat controller', () => {
     const res = await request(testApp).delete('/api/chat/memory');
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chat Service — get_user_profile_summary returns full Q&A
+// ---------------------------------------------------------------------------
+
+describe('chatService get_user_profile_summary', () => {
+  it('returns questionsAndAnswers with text and voice answers, no auth fields', async () => {
+    const uniqueEmail = `test-qna-${new mongoose.Types.ObjectId().toString()}@example.com`;
+    const user = await User.create({
+      email: uniqueEmail,
+      password: 'hashed-password',
+      name: 'Test User',
+      resume: {
+        skills: ['TypeScript'],
+        experience: ['Built stuff'],
+        summary: 'A developer',
+      },
+      qna: [
+        { questionId: 'your-story', answer: 'I built X and Y', mode: 'text', skipped: false },
+        { questionId: 'fun-activities', answer: 'I hike', mode: 'voice', skipped: false },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    mockCreate
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            role: 'assistant' as const,
+            content: null,
+            tool_calls: [{
+              id: 'tc_profile',
+              type: 'function' as const,
+              function: { name: 'get_user_profile_summary', arguments: '{}' },
+            }],
+          },
+          finish_reason: 'tool_calls' as const,
+        }],
+      })
+      .mockResolvedValueOnce(defaultMockResponse);
+
+    await processMessage(testUserId.toString(), 'Tell me about my Q&A answers');
+
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    const secondCallMessages = mockCreate.mock.calls[1][0].messages as any[];
+    const toolMsg = secondCallMessages.find((m: any) => m.role === 'tool');
+    expect(toolMsg).toBeDefined();
+
+    const toolContent = JSON.parse(toolMsg.content);
+    expect(toolContent.questionsAndAnswers).toBeDefined();
+    expect(Array.isArray(toolContent.questionsAndAnswers)).toBe(true);
+
+    const storyEntry = toolContent.questionsAndAnswers.find(
+      (q: any) => q.question === 'What is your story?'
+    );
+    expect(storyEntry).toBeDefined();
+    expect(storyEntry.answer).toBe('I built X and Y');
+    expect(storyEntry.mode).toBe('text');
+
+    const hikeEntry = toolContent.questionsAndAnswers.find(
+      (q: any) => q.question === 'What do you do for fun?'
+    );
+    expect(hikeEntry).toBeDefined();
+    expect(hikeEntry.answer).toBe('I hike');
+    expect(hikeEntry.mode).toBe('voice');
+
+    // Verify no auth fields leaked
+    const contentStr = toolMsg.content;
+    expect(contentStr).not.toContain('passwordResetToken');
+    expect(contentStr).not.toContain('emailVerificationToken');
+    expect(contentStr).not.toContain('password');
   });
 });
