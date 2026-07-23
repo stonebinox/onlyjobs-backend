@@ -49,7 +49,8 @@ const validateStringArray = (fieldName: string, value: unknown) => {
 
 export const authenticateUser = asyncHandler(
   async (req: Request, res: Response) => {
-    let { email, password } = req.body;
+    const { password } = req.body;
+    let { email } = req.body;
 
     if (
       !email ||
