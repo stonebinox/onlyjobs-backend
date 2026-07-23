@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 
 import connectDB, { isDbConnected } from "./utils/connectDB";
+import { errorHandler } from "./middleware/errorHandler";
 import userRoutes from "./routes/userRoutes";
 import jobRoutes from "./routes/jobRoutes";
 import matchRoutes from "./routes/matchRoutes";
@@ -59,20 +60,7 @@ app.get("/healthcheck", (req, res) => {
 });
 
 // Error handler middleware
-app.use(
-  (
-    err: Error,
-    req: express.Request,
-    res: express.Response,
-    next: express.NextFunction
-  ) => {
-    console.error(err.stack);
-    res.status(500).json({
-      message: err.message || "Something went wrong!",
-      stack: process.env.NODE_ENV === "production" ? "🥞" : err.stack,
-    });
-  }
-);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 

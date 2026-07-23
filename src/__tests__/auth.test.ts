@@ -173,6 +173,15 @@ describe('POST /api/users/reset-password', () => {
 });
 
 describe('POST /api/users/verify-email', () => {
+  it('returns 400 (not 500) for an invalid or nonexistent token', async () => {
+    const res = await request(testApp)
+      .post('/api/users/verify-email')
+      .send({ token: 'nonexistent-invalid-token' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid or expired/i);
+  });
+
   it('returns 200 and marks user as verified for a valid verification token', async () => {
     const token = crypto.randomBytes(32).toString('hex');
 
