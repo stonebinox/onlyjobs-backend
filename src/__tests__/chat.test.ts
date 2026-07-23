@@ -320,6 +320,289 @@ describe('chat controller', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Chat Service — compact profile context injection (deterministic, no tool call)
+// ---------------------------------------------------------------------------
+
+describe('chatService compact profile context injection', () => {
+  it('injects profile and Q&A into system prompt without requiring a tool call', async () => {
+    const user = await User.create({
+      email: `test-inject-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Jane Dev',
+      resume: {
+        summary: 'Full-stack developer',
+        skills: ['TypeScript', 'React'],
+        experience: ['Led engineering at Startup X'],
+      },
+      qna: [
+        { questionId: 'your-story', answer: 'I built X and Y in my career', mode: 'text', skipped: false },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'help me answer this application question: why should we hire you?');
+
+    // Profile context is injected: only one OpenAI call (no tool round-trip needed)
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg).toBeDefined();
+    expect(systemMsg.content).toContain('Jane Dev');
+    expect(systemMsg.content).toContain('Full-stack developer');
+    expect(systemMsg.content).toContain('TypeScript');
+    expect(systemMsg.content).toContain('I built X and Y in my career');
+  });
+
+  it('system prompt frames assistant as able to draft and refine job-application answers', async () => {
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg.content).toMatch(/draft|application answer|application question/i);
+    expect(systemMsg.content).toMatch(/voice/i);
+  });
+
+  it('injected context is wrapped in prompt-injection safety delimiters', async () => {
+    const user = await User.create({
+      email: `test-delim-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Delim User',
+      resume: { skills: ['Go'] },
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg.content).toContain('<user_profile_data>');
+    expect(systemMsg.content).toContain('</user_profile_data>');
+    expect(systemMsg.content).toMatch(/REFERENCE DATA|reference data/);
+  });
+
+  it('injected context does not contain auth fields', async () => {
+    const user = await User.create({
+      email: `test-auth-safe-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'super-secret-hash',
+      name: 'Secure User',
+      resume: { skills: ['JS'] },
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Tell me about myself');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    const content = systemMsg.content as string;
+    expect(content).not.toContain('super-secret-hash');
+    expect(content).not.toContain('"password"');
+    expect(content).not.toContain('emailVerificationToken');
+    expect(content).not.toContain('passwordResetToken');
+    expect(content).not.toContain('pendingEmail');
+  });
+
+  it('handles empty Q&A without crashing and still includes profile data', async () => {
+    const user = await User.create({
+      email: `test-empty-qna-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Empty QnA User',
+      resume: { skills: ['Go'], summary: 'A developer' },
+      qna: [],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await expect(processMessage(testUserId.toString(), 'Hello')).resolves.toBeDefined();
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg.content).toContain('Empty QnA User');
+    expect(systemMsg.content).toContain('A developer');
+    // No Q&A section since there are none
+    expect(systemMsg.content).not.toContain('Q: ');
+  });
+
+  it('represents skipped Q&A entries as [skipped] in injected context', async () => {
+    const user = await User.create({
+      email: `test-skipped-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Skip User',
+      resume: { skills: ['Python'] },
+      qna: [
+        { questionId: 'your-story', answer: '', mode: 'text', skipped: true },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    const content = systemMsg.content as string;
+    expect(content).toContain('[skipped]');
+    // The skipped question text (or questionId fallback) should appear, but not as a real answer
+    expect(content).not.toContain('A: I built');
+  });
+
+  it('includes voice-transcribed answers in injected context', async () => {
+    const user = await User.create({
+      email: `test-voice-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Voice User',
+      resume: { skills: ['Rust'] },
+      qna: [
+        { questionId: 'fun-activities', answer: 'I love hiking and climbing', mode: 'voice', skipped: false },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg.content).toContain('I love hiking and climbing');
+  });
+
+  it('falls back to questionId string for stale/unknown question IDs', async () => {
+    const user = await User.create({
+      email: `test-stale-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Stale ID User',
+      resume: { skills: ['C++'] },
+      qna: [
+        { questionId: 'unknown-question-xyz-stale', answer: 'Some answer here', mode: 'text', skipped: false },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    expect(systemMsg.content).toContain('unknown-question-xyz-stale');
+    expect(systemMsg.content).toContain('Some answer here');
+  });
+
+  it('caps Q&A entries at 12 (COMPACT_QNA_MAX_ENTRIES)', async () => {
+    const qnaEntries = Array.from({ length: 20 }, (_, i) => ({
+      questionId: `q-fake-${i}`,
+      answer: `Answer to question number ${i}`,
+      mode: 'text' as const,
+      skipped: false,
+    }));
+
+    const user = await User.create({
+      email: `test-cap-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Cap User',
+      resume: { skills: ['C++'] },
+      qna: qnaEntries,
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    const content = systemMsg.content as string;
+    const qnaMatches = content.match(/^Q: /gm);
+    expect(qnaMatches).not.toBeNull();
+    expect(qnaMatches!.length).toBeLessThanOrEqual(12);
+  });
+
+  it('truncates long Q&A answers at 400 chars with ellipsis', async () => {
+    const longAnswer = 'A'.repeat(600);
+    const user = await User.create({
+      email: `test-long-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Long Answer User',
+      resume: { skills: ['Java'] },
+      qna: [
+        { questionId: 'your-story', answer: longAnswer, mode: 'text', skipped: false },
+      ],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    const content = systemMsg.content as string;
+    expect(content).not.toContain('A'.repeat(600));
+    expect(content).toContain('A'.repeat(400) + '...');
+  });
+
+  it('total injected block is bounded under COMPACT_BLOCK_MAX_CHARS', async () => {
+    const longAnswer = 'B'.repeat(500);
+    const qnaEntries = Array.from({ length: 15 }, (_, i) => ({
+      questionId: `q-big-${i}`,
+      answer: longAnswer,
+      mode: 'text' as const,
+      skipped: false,
+    }));
+
+    const user = await User.create({
+      email: `test-bounded-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Bounded User',
+      resume: {
+        skills: Array.from({ length: 50 }, (_, i) => `skill${i}`),
+        summary: 'C'.repeat(1000),
+      },
+      qna: qnaEntries,
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    // The profile block itself is capped at 4000 chars; the total system prompt has static text too
+    // but should stay well under a reasonable ceiling
+    expect(systemMsg.content.length).toBeLessThan(10000);
+    // The truncation marker should appear
+    expect(systemMsg.content).toContain('[...truncated]');
+  });
+
+  it('prefers answered Q&A entries over skipped ones when capping', async () => {
+    // 8 skipped first in array, then 8 answered — cap is 12 so answered should dominate
+    const skippedEntries = Array.from({ length: 8 }, (_, i) => ({
+      questionId: `q-skip-${i}`,
+      answer: '',
+      mode: 'text' as const,
+      skipped: true,
+    }));
+    const answeredEntries = Array.from({ length: 8 }, (_, i) => ({
+      questionId: `q-ans-${i}`,
+      answer: `Real answer ${i}`,
+      mode: 'text' as const,
+      skipped: false,
+    }));
+
+    const user = await User.create({
+      email: `test-prefer-${new mongoose.Types.ObjectId()}@example.com`,
+      password: 'hashed',
+      name: 'Prefer User',
+      resume: { skills: ['Elixir'] },
+      qna: [...skippedEntries, ...answeredEntries],
+    });
+    testUserId = user._id as mongoose.Types.ObjectId;
+
+    await processMessage(testUserId.toString(), 'Hello');
+
+    const firstCallMessages = mockCreate.mock.calls[0][0].messages as any[];
+    const systemMsg = firstCallMessages.find((m: any) => m.role === 'system');
+    const content = systemMsg.content as string;
+    // All 8 answered entries should appear (they get priority)
+    for (let i = 0; i < 8; i++) {
+      expect(content).toContain(`Real answer ${i}`);
+    }
+    // Only 4 skipped slots remain (12 - 8 = 4), so not all 8 skipped appear
+    const skippedMatches = (content.match(/\[skipped\]/g) ?? []).length;
+    expect(skippedMatches).toBeLessThanOrEqual(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Chat Service — get_user_profile_summary returns full Q&A
 // ---------------------------------------------------------------------------
 
