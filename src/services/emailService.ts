@@ -2,6 +2,7 @@ import { Resend } from "resend";
 
 import { IUser } from "../models/User";
 import { Freshness } from "../models/MatchRecord";
+import { renderEmailButton, renderEmailShell } from "./emailTemplate";
 
 export interface MatchSummaryItem {
   title: string;
@@ -59,18 +60,15 @@ export const sendInitialVerificationEmail = async (
   const verifyUrl = `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   const subject = "Verify your email address for onlyjobs";
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #1f2937;">
+  const inner = `
       <h2 style="color:#111827;">Verify your email address</h2>
       <p>Welcome to onlyjobs! Please verify your email address to start receiving job matches.</p>
       <p>Click the button below to verify your email address.</p>
-      <div style="margin-top:20px; text-align:center;">
-        <a href="${verifyUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:600;">Verify Email</a>
-      </div>
+      ${renderEmailButton(verifyUrl, "Verify Email")}
       <p style="margin-top:16px; color:#6b7280; font-size:14px;">This link will expire in 24 hours and can be used only once.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
-    </div>
   `;
+  const html = renderEmailShell(inner);
 
   try {
     if (!resendClient) {
@@ -131,18 +129,15 @@ export const sendEmailChangeVerificationEmail = async (
   const verifyUrl = `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   const subject = "Confirm your new email address for onlyjobs";
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #1f2937;">
+  const inner = `
       <h2 style="color:#111827;">Confirm your new email</h2>
       <p>We received a request to change your onlyjobs email from <strong>${userEmail}</strong> to <strong>${newEmail}</strong>.</p>
       <p>If this was you, click the button below to verify. If not, you can ignore this email.</p>
-      <div style="margin-top:20px; text-align:center;">
-        <a href="${verifyUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; font-weight:600;">Confirm New Email</a>
-      </div>
+      ${renderEmailButton(verifyUrl, "Confirm New Email")}
       <p style="margin-top:16px; color:#6b7280; font-size:14px;">This link will expire soon and can be used only once.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
-    </div>
   `;
+  const html = renderEmailShell(inner);
 
   try {
     if (!resendClient) {
