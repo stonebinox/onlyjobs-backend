@@ -934,6 +934,7 @@ export const updatePreferences = asyncHandler(
 
         // Send email if matching status changed
         if (previousMatchingEnabled !== newMatchingEnabled) {
+          user.matchingDisabledReason = newMatchingEnabled === false ? "user" : undefined;
           await user.save();
           if (newMatchingEnabled) {
             // Matching enabled - send welcome back email

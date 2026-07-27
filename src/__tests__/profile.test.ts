@@ -120,3 +120,64 @@ describe('PUT /api/users/profile', () => {
     expect(res.body.user.currentLocation).toBe('Berlin, Germany');
   });
 });
+
+// ---------------------------------------------------------------------------
+// PUT /api/users/preferences — matchingDisabledReason stamping
+// ---------------------------------------------------------------------------
+
+describe('PUT /api/users/preferences — matchingDisabledReason', () => {
+  it('stamps matchingDisabledReason="user" when user disables matching', async () => {
+    const { user, token } = await createUserAndToken({
+      preferences: { matchingEnabled: true },
+    });
+
+    const res = await request(testApp)
+      .put('/api/users/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ matchingEnabled: false });
+
+    expect(res.status).toBe(200);
+
+    const updated = await User.findById(user._id);
+    expect(updated!.preferences.matchingEnabled).toBe(false);
+    expect(updated!.matchingDisabledReason).toBe('user');
+  });
+
+  it('clears matchingDisabledReason when user re-enables matching', async () => {
+    const { user, token } = await createUserAndToken({
+      preferences: { matchingEnabled: false },
+      matchingDisabledReason: 'user',
+    });
+
+    const res = await request(testApp)
+      .put('/api/users/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ matchingEnabled: true });
+
+    expect(res.status).toBe(200);
+
+    const updated = await User.findById(user._id);
+    expect(updated!.preferences.matchingEnabled).toBe(true);
+    expect(updated!.matchingDisabledReason).toBeUndefined();
+  });
+
+  it('REGRESSION: does not overwrite matchingDisabledReason="auto_low_balance" when no matching transition occurs', async () => {
+    // User was auto-disabled due to low balance. Frontend always sends matchingEnabled
+    // in the payload even when updating other prefs. The reason must survive untouched.
+    const { user, token } = await createUserAndToken({
+      preferences: { matchingEnabled: false, jobTypes: ['full_time'] },
+      matchingDisabledReason: 'auto_low_balance',
+    });
+
+    const res = await request(testApp)
+      .put('/api/users/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ matchingEnabled: false, jobTypes: ['full_time', 'contract'] });
+
+    expect(res.status).toBe(200);
+
+    const updated = await User.findById(user._id);
+    expect(updated!.preferences.matchingEnabled).toBe(false);
+    expect(updated!.matchingDisabledReason).toBe('auto_low_balance');
+  });
+});

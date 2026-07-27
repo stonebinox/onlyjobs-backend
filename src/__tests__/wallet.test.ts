@@ -14,7 +14,7 @@ import request from 'supertest';
 import express from 'express';
 import User from '../models/User';
 import Transaction from '../models/Transaction';
-import { createOrder, verifyPayment } from '../services/razorpayService';
+import { createOrder, verifyPayment, verifyWebhookSignature } from '../services/razorpayService';
 import walletRoutes from '../routes/walletRoutes';
 
 const mockCreateOrder = createOrder as jest.Mock;
@@ -265,5 +265,142 @@ describe('GET /api/wallet/transactions', () => {
     expect(res.body.transactions).toHaveLength(3);
     expect(res.body.pagination.total).toBe(5);
     expect(res.body.pagination.totalPages).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Post-credit wallet state (balanceReminderCount, auto-re-enable)
+// ---------------------------------------------------------------------------
+
+const mockVerifyWebhookSignature = verifyWebhookSignature as jest.Mock;
+
+interface UserStateOverrides {
+  walletBalance?: number;
+  balanceReminderCount?: number;
+  lastBalanceReminderAt?: Date;
+  matchingDisabledReason?: 'auto_low_balance' | 'user';
+  matchingEnabled?: boolean;
+}
+
+async function createUserForStateTest(overrides: UserStateOverrides = {}) {
+  return User.create({
+    _id: testUserId,
+    name: 'Test User',
+    email: `test-${Date.now()}-${Math.random()}@example.com`,
+    password: 'hashed',
+    resume: { skills: [], experience: [], education: [], summary: '' },
+    preferences: {
+      jobTypes: [],
+      location: [],
+      remoteOnly: false,
+      minSalary: 0,
+      industries: [],
+      minScore: 30,
+      matchingEnabled: overrides.matchingEnabled ?? true,
+    },
+    walletBalance: overrides.walletBalance ?? 0,
+    balanceReminderCount: overrides.balanceReminderCount,
+    lastBalanceReminderAt: overrides.lastBalanceReminderAt,
+    matchingDisabledReason: overrides.matchingDisabledReason,
+  });
+}
+
+describe('POST /api/wallet/verify-payment — post-credit wallet state', () => {
+  async function creditViaVerify(creditAmount: number, userOverrides: UserStateOverrides = {}) {
+    await createUserForStateTest(userOverrides);
+    await Transaction.create({
+      userId: testUserId,
+      type: 'credit',
+      amount: creditAmount,
+      description: `Wallet top-up - $${creditAmount}`,
+      razorpayOrderId: 'order_state_test',
+      status: 'pending',
+    });
+    mockVerifyPayment.mockReturnValue(true);
+    return request(testApp).post('/api/wallet/verify-payment').send({
+      orderId: 'order_state_test',
+      paymentId: 'pay_state_test',
+      signature: 'valid_sig',
+    });
+  }
+
+  it('resets balanceReminderCount and clears lastBalanceReminderAt when balance reaches >= 0.30', async () => {
+    await creditViaVerify(1, {
+      balanceReminderCount: 3,
+      lastBalanceReminderAt: new Date('2025-01-01'),
+    });
+
+    const user = await User.findById(testUserId);
+    expect(user!.balanceReminderCount).toBe(0);
+    expect(user!.lastBalanceReminderAt).toBeUndefined();
+  });
+
+  it('re-enables matching when user was auto-disabled (auto_low_balance)', async () => {
+    await creditViaVerify(1, {
+      matchingEnabled: false,
+      matchingDisabledReason: 'auto_low_balance',
+    });
+
+    const user = await User.findById(testUserId);
+    expect(user!.preferences.matchingEnabled).toBe(true);
+    expect(user!.matchingDisabledReason).toBeUndefined();
+  });
+
+  it('does NOT re-enable matching when user deliberately paused (reason=user)', async () => {
+    await creditViaVerify(1, {
+      matchingEnabled: false,
+      matchingDisabledReason: 'user',
+    });
+
+    const user = await User.findById(testUserId);
+    expect(user!.preferences.matchingEnabled).toBe(false);
+    expect(user!.matchingDisabledReason).toBe('user');
+  });
+});
+
+describe('POST /api/wallet/webhook — post-credit wallet state', () => {
+  beforeEach(() => {
+    mockVerifyWebhookSignature.mockClear();
+  });
+
+  async function creditViaWebhook(userOverrides: UserStateOverrides = {}) {
+    await createUserForStateTest(userOverrides);
+    await Transaction.create({
+      userId: testUserId,
+      type: 'credit',
+      amount: 5,
+      description: 'Wallet top-up - $5',
+      razorpayOrderId: 'order_webhook_test',
+      status: 'pending',
+    });
+    mockVerifyWebhookSignature.mockReturnValue(true);
+    return request(testApp).post('/api/wallet/webhook').set('x-razorpay-signature', 'valid_sig').send({
+      event: 'payment.captured',
+      payload: {
+        payment: { entity: { order_id: 'order_webhook_test', id: 'pay_webhook_test' } },
+      },
+    });
+  }
+
+  it('re-enables matching via webhook when auto-disabled', async () => {
+    await creditViaWebhook({
+      matchingEnabled: false,
+      matchingDisabledReason: 'auto_low_balance',
+    });
+
+    const user = await User.findById(testUserId);
+    expect(user!.preferences.matchingEnabled).toBe(true);
+    expect(user!.matchingDisabledReason).toBeUndefined();
+  });
+
+  it('does NOT re-enable matching via webhook when user deliberately paused', async () => {
+    await creditViaWebhook({
+      matchingEnabled: false,
+      matchingDisabledReason: 'user',
+    });
+
+    const user = await User.findById(testUserId);
+    expect(user!.preferences.matchingEnabled).toBe(false);
+    expect(user!.matchingDisabledReason).toBe('user');
   });
 });

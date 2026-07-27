@@ -57,6 +57,9 @@ export interface IUser extends Document {
   passwordResetExpires?: Date;
   lastLoginAt?: Date;
   lastManualMatchAt?: Date;
+  balanceReminderCount: number;
+  lastBalanceReminderAt?: Date;
+  matchingDisabledReason?: "auto_low_balance" | "user";
   guideProgress?: Map<
     string,
     {
@@ -129,6 +132,9 @@ const UserSchema: Schema = new Schema(
     passwordResetExpires: { type: Date },
     lastLoginAt: { type: Date },
     lastManualMatchAt: { type: Date },
+    balanceReminderCount: { type: Number, default: 0 },
+    lastBalanceReminderAt: { type: Date },
+    matchingDisabledReason: { type: String, enum: ["auto_low_balance", "user"] },
     guideProgress: {
       type: Map,
       of: {

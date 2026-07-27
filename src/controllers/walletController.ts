@@ -8,6 +8,7 @@ import {
   verifyWebhookSignature,
   fetchOrder,
 } from "../services/razorpayService";
+import { reconcilePostCreditWalletState } from "../utils/walletState";
 
 /**
  * Get current wallet balance for authenticated user
@@ -136,6 +137,7 @@ export const verifyAndCreditWallet = asyncHandler(
 
     user.walletBalance = (user.walletBalance || 0) + transaction.amount;
     await user.save();
+    await reconcilePostCreditWalletState(user._id);
 
     res.json({
       success: true,
@@ -355,6 +357,7 @@ export const handleRazorpayWebhook = asyncHandler(
                 user.walletBalance =
                   (user.walletBalance || 0) + transaction.amount;
                 await user.save();
+                await reconcilePostCreditWalletState(user._id);
 
                 transaction.metadata = {
                   ...transaction.metadata,
@@ -481,6 +484,7 @@ export const syncTransactionStatus = asyncHandler(
       if (user && !transaction.metadata?.walletCredited) {
         user.walletBalance = (user.walletBalance || 0) + transaction.amount;
         await user.save();
+        await reconcilePostCreditWalletState(user._id);
 
         transaction.metadata = {
           ...transaction.metadata,
@@ -551,6 +555,7 @@ export const cleanupStalePendingTransactions = async (): Promise<void> => {
             if (user && !txn.metadata?.walletCredited) {
               user.walletBalance = (user.walletBalance || 0) + txn.amount;
               await user.save();
+              await reconcilePostCreditWalletState(user._id);
 
               txn.metadata = {
                 ...txn.metadata,
