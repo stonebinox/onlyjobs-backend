@@ -220,4 +220,45 @@ describe('matchUserToJob', () => {
     const result = await matchUserToJob(user, job);
     expect(result.matchScore).toBe(75);
   });
+
+  it('returns the exact matchScore, verdict, and reasoning from the mocked matcher response', async () => {
+    const expectedReasoning =
+      'Your Node and MongoDB work maps almost exactly onto their stack, and they are explicit that the backend hire owns schema design. Worth applying.';
+
+    (MockOpenAI as any).__mockCreate.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            matchScore: 88,
+            verdict: 'Strong match',
+            reasoning: expectedReasoning,
+          }),
+        },
+      }],
+    });
+
+    const user = {
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Test User',
+      resume: 'Backend engineer with Node and MongoDB experience',
+      preferences: {},
+      learnedPreferences: null,
+    } as any;
+
+    const job = await JobListing.create({
+      title: 'Backend Engineer',
+      company: 'Test Co',
+      location: ['Remote'],
+      source: 'test',
+      description: 'Own schema design for our backend',
+      url: 'https://example.com/job-verdict',
+      scrapedDate: new Date(),
+    });
+
+    const result = await matchUserToJob(user, job);
+
+    expect(result.matchScore).toBe(88);
+    expect(result.verdict).toBe('Strong match');
+    expect(result.reasoning).toBe(expectedReasoning);
+  });
 });
