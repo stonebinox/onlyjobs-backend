@@ -28,6 +28,12 @@ export interface RejectionReason {
   analyzedAt?: Date; // when the AI analyzed this reason
 }
 
+// How matchScore was arrived at (onlyjobs-7cq, background repo — threshold-stability sampling).
+// Mirrored here only so Mongoose doesn't strip these fields when the backend reads/re-saves a
+// MatchRecord the background job created (e.g. skipMatch/markMatchAppliedStatus call .save()).
+// Optional so pre-existing MatchRecords remain valid.
+export type ScoreAggregation = "single" | "median_near_threshold";
+
 export interface IMatchRecord extends Document {
   userId: mongoose.Types.ObjectId;
   jobId: mongoose.Types.ObjectId;
@@ -47,6 +53,9 @@ export interface IMatchRecord extends Document {
   outcomeRecordedAt?: Date | null;
   notAppliedReason?: RejectionReason;
   qna?: MatchQnA[];
+  scoreSamples?: number[];
+  scoreSampleCount?: number;
+  scoreAggregation?: ScoreAggregation;
 }
 
 const MatchRecordSchema: Schema = new Schema(
@@ -93,6 +102,13 @@ const MatchRecordSchema: Schema = new Schema(
         },
       ],
       default: [],
+    },
+    scoreSamples: { type: [Number], default: undefined },
+    scoreSampleCount: { type: Number, default: undefined },
+    scoreAggregation: {
+      type: String,
+      enum: ["single", "median_near_threshold"],
+      default: undefined,
     },
   },
   { timestamps: true }
