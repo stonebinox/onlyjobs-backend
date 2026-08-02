@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
+import mongoose from "mongoose";
 
 import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
@@ -252,6 +253,31 @@ export const recordApplicationOutcome = expressAsyncHandler(
     await match.save();
 
     res.json({ message: "Application outcome recorded", outcome });
+  }
+);
+
+// @desc    Get user's full application tracker (all applied records, no date/score window)
+// @route   GET /api/matches/tracker
+// @access  Private
+export const getTracker = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+
+    const matches = await MatchRecord.find({ userId, applied: true }).sort({ appliedAt: -1 });
+
+    const jobIds = matches.map((m) => m.jobId);
+    const jobs = await JobListing.find({ _id: { $in: jobIds } });
+    const jobMap = new Map(
+      jobs.map((j) => [(j._id as mongoose.Types.ObjectId).toString(), j])
+    );
+
+    // Keep records even when the job listing has been deleted — tracker must not silently drop old applications
+    const result = matches.map((match) => {
+      const job = jobMap.get(match.jobId.toString()) ?? null;
+      return { ...match.toObject(), job };
+    });
+
+    res.json(result);
   }
 );
 
