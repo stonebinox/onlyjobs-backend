@@ -10,9 +10,11 @@ import {
   recordApplicationOutcome,
   triggerMatchForMe,
 } from "../controllers/matchController";
+import { getOutOfCreditPreview } from "../controllers/outOfCreditPreviewController";
 
 const router = express.Router();
 
+router.get("/out-of-credit-preview", protect, getOutOfCreditPreview);
 router.get("/", protect, getMatches);
 router.get("/count", protect, getMatchCount);
 router.post("/click", protect, markMatchClick);
