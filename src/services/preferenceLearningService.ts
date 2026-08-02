@@ -4,7 +4,11 @@ import User, { IUser } from "../models/User";
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord, RejectionReason } from "../models/MatchRecord";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 
 // Reason categories that should NOT be used for learning
 const NON_LEARNING_CATEGORIES = ["job_inactive"];
@@ -99,7 +103,7 @@ export const analyzeRejectionAndUpdatePreferences = async (
   };
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         { role: "system", content: buildPreferenceLearningPrompt() },

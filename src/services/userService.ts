@@ -16,7 +16,11 @@ import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstruc
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord } from "../models/MatchRecord";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 
 export const findUserByEmail = async (email: string) => {
   return User.findOne({ email });
@@ -59,7 +63,7 @@ export const parseUserCV = async (uploadedFilePath: string) => {
         ? rawText.slice(0, MAX_TOKENS) + "\n\n[TRUNCATED]"
         : rawText;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         { role: "system", content: cvParserInstructions },
@@ -110,7 +114,7 @@ export const getAIQuestion = async (user: IUser) => {
       return existingIndex < 0;
     });
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         {
@@ -153,7 +157,7 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
   );
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         {
@@ -208,7 +212,7 @@ export const answerQuestion = async (user: IUser, answer: AnsweredQuestion) => {
 export const parseAudioAnswer = async (audioBuffer: ReadStream) => {
 
   try {
-    const response = await openai.audio.transcriptions.create({
+    const response = await getOpenAI().audio.transcriptions.create({
       file: audioBuffer,
       model: "whisper-1",
       response_format: "text",
@@ -315,7 +319,7 @@ export const getAnswerForQuestion = async (
 
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         {

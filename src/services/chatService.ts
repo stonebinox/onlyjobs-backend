@@ -2,7 +2,11 @@ import OpenAI from "openai";
 import mongoose from "mongoose";
 import ChatConversation from "../models/ChatConversation";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 import ChatMemory from "../models/ChatMemory";
 import MatchRunLog from "../models/MatchRunLog";
 import MatchRecord from "../models/MatchRecord";
@@ -641,7 +645,7 @@ async function summarizeOlderMessages(
     ? `Previous summary: ${existingSummary}\n\nNow also summarize these additional messages:\n${conversationText}`
     : conversationText;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: process.env.GPT_MODEL || "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
@@ -722,7 +726,7 @@ export async function processMessage(
       const messagesToSummarize = allMessages.slice(existingSummaryUpTo, cutoffIndex);
       try {
         summary = await withTimeout(
-          summarizeOlderMessages(openai, messagesToSummarize, summary ?? undefined),
+          summarizeOlderMessages(getOpenAI(), messagesToSummarize, summary ?? undefined),
           10000,
           "summarize_conversation"
         );
@@ -760,12 +764,12 @@ export async function processMessage(
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
-    const response = await withTimeout(openai.chat.completions.create({
+    const response = await withTimeout(getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: openaiMessages,
       tools: TOOLS,
       tool_choice: "auto",
-    }), 30000, "openai.chat.completions.create");
+    }), 30000, "getOpenAI().chat.completions.create");
 
     const choice = response.choices[0];
     const responseMessage = choice.message;
