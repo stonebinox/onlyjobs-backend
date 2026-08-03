@@ -281,6 +281,88 @@ export const getTracker = expressAsyncHandler(
   }
 );
 
+// @desc    Unskip a previously user-skipped match
+// @route   POST /api/matches/unskip
+// @access  Private
+export const unskipMatch = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { matchId } = req.body;
+    const userId = req.user!._id;
+
+    if (!matchId) {
+      res.status(400);
+      throw new Error("Match ID is required");
+    }
+
+    if (typeof matchId !== "string" || !mongoose.isValidObjectId(matchId)) {
+      res.status(400);
+      throw new Error("Invalid match ID");
+    }
+
+    const match = await MatchRecord.findById(matchId);
+    if (!match) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+
+    if (match.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    // Idempotence: already unskipped — return success without mutation
+    if (match.skipped !== true) {
+      res.json({ message: "Match already unskipped" });
+      return;
+    }
+
+    // Auto-skip guard: nightly matcher writes verdict:"skipped" + a real category;
+    // a user-skip always keeps its original AI verdict (never the literal "skipped")
+    if (!match.skipReason?.category || match.verdict === "skipped") {
+      res.status(400);
+      throw new Error("Not a user-skipped match");
+    }
+
+    match.skipped = false;
+    match.skipReason = undefined;
+    await match.save();
+
+    res.json({ message: "Match unskipped" });
+  }
+);
+
+// @desc    Get user's user-skipped matches (excludes auto-skipped rows)
+// @route   GET /api/matches/skipped
+// @access  Private
+export const getSkipped = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+
+    // Only user-skipped rows: skipped=true AND skipReason.category exists AND verdict!=="skipped"
+    // (auto-skips written by the nightly matcher carry verdict:"skipped" + a real category)
+    const matches = await MatchRecord.find({
+      userId,
+      skipped: true,
+      "skipReason.category": { $exists: true },
+      verdict: { $ne: "skipped" },
+    }).sort({ updatedAt: -1 });
+
+    const jobIds = matches.map((m) => m.jobId);
+    const jobs = await JobListing.find({ _id: { $in: jobIds } });
+    const jobMap = new Map(
+      jobs.map((j) => [(j._id as mongoose.Types.ObjectId).toString(), j])
+    );
+
+    // Keep records even when the job listing is missing — render fallback client-side
+    const result = matches.map((match) => {
+      const job = jobMap.get(match.jobId.toString()) ?? null;
+      return { ...match.toObject(), job };
+    });
+
+    res.json(result);
+  }
+);
+
 // @desc    Trigger on-demand job matching for the authenticated user
 // @route   POST /api/matches/trigger-for-me
 // @access  Private
