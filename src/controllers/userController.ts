@@ -198,13 +198,26 @@ export const updateUserCV = asyncHandler(
       fs.writeFileSync(filePath, file.buffer);
       const parsedCV = await parseUserCV(filePath);
 
+      const parsed = parsedCV.preferences ?? {};
+      const ALLOWED = [
+        "jobTypes",
+        "location",
+        "remoteOnly",
+        "minSalary",
+        "industries",
+      ] as const;
+      const setOps: Record<string, unknown> = {
+        name: parsedCV.name,
+        resume: parsedCV.resume,
+      };
+      for (const key of ALLOWED) {
+        if (parsed[key] !== undefined) {
+          setOps[`preferences.${key}`] = parsed[key];
+        }
+      }
       const updatedUser = await User.findByIdAndUpdate(
         userId,
-        {
-          name: parsedCV.name,
-          resume: parsedCV.resume,
-          preferences: parsedCV.preferences,
-        },
+        { $set: setOps },
         { new: true }
       );
 
