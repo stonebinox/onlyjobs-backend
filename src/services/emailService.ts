@@ -261,7 +261,7 @@ export const sendMatchingEnabledEmail = async (user: IUser): Promise<boolean> =>
   }
 
   const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
-  const dashboardUrl = `${frontendUrl}/dashboard`;
+  const todayUrl = `${frontendUrl}/today`;
 
   const subject = "Welcome back! Job matching is now active";
   const html = `
@@ -270,7 +270,7 @@ export const sendMatchingEnabledEmail = async (user: IUser): Promise<boolean> =>
       <p>We've reactivated job matching for your account. Starting with the next matching run, we'll find opportunities that match your profile and preferences.</p>
       <p>When we find matches, we'll deduct $0.30 from your wallet and send you a summary email with the top opportunities.</p>
       <div style="margin-top:24px; text-align:center;">
-        <a href="${dashboardUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Dashboard</a>
+        <a href="${todayUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Your Matches</a>
       </div>
       <p style="margin-top:16px;">– The onlyjobs team</p>
       ${emailPauseFooter(frontendUrl)}
@@ -459,9 +459,9 @@ export const sendMatchSummaryEmail = async (
     ? `<p style="margin-top:12px;"><strong>Plus ${remainingCount} more match${remainingCount === 1 ? '' : 'es'} waiting for you in your dashboard!</strong></p>`
     : '';
 
-  // Get frontend URL for dashboard link
+  // Get frontend URL for today link
   const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "https://onlyjobs.app";
-  const dashboardUrl = `${frontendUrl}/dashboard`;
+  const todayUrl = `${frontendUrl}/today`;
 
   const subject = `You have ${matches.length} new match${matches.length === 1 ? '' : 'es'} on onlyjobs`;
   const html = `
@@ -474,7 +474,7 @@ export const sendMatchSummaryEmail = async (
         2
       )}. Your updated wallet balance is visible in your dashboard.</p>
       <div style="margin-top:24px; text-align:center;">
-        <a href="${dashboardUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Your Matches</a>
+        <a href="${todayUrl}" style="display:inline-block; background-color:#111827; color:#ffffff; padding:12px 24px; text-decoration:none; border-radius:6px; font-weight:600;">View Your Matches</a>
       </div>
       <p style="margin-top:24px; color:#6b7280; font-size:14px;">Jump back in to review details, save your favorites, or skip roles you're not interested in.</p>
       <p style="margin-top:16px;">– The onlyjobs team</p>
