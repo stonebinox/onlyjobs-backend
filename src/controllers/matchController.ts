@@ -12,6 +12,7 @@ import {
   markMatchAppliedStatus,
 } from "../services/matchingService";
 import { analyzeRejectionAndUpdatePreferences } from "../services/preferenceLearningService";
+import { hasMeaningfulResume } from "../utils/resumePredicate";
 
 // @desc    Get user's job matches
 // @route   GET /api/matches/
@@ -376,14 +377,28 @@ export const triggerMatchForMe = expressAsyncHandler(
       throw new Error("User not found");
     }
 
-    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
-    if (user.lastManualMatchAt && Date.now() - user.lastManualMatchAt.getTime() < SIX_HOURS_MS) {
-      const retryAfterMinutes = Math.ceil(
-        (user.lastManualMatchAt.getTime() + SIX_HOURS_MS - Date.now()) / 60000
-      );
-      res.status(429).json({
-        message: `Please wait before triggering another match run.`,
-        retryAfterMinutes,
+    // Eligibility gates — checked before any cooldown claim or dispatch
+    if (!user.isVerified) {
+      res.status(403).json({ message: "Verify your email to run matching.", reason: "unverified" });
+      return;
+    }
+
+    if (!hasMeaningfulResume(user.resume)) {
+      res.status(400).json({ message: "Add your CV to run matching.", reason: "no_resume" });
+      return;
+    }
+
+    if (user.preferences?.matchingEnabled === false) {
+      res.status(400).json({ message: "Matching is turned off in your settings.", reason: "matching_disabled" });
+      return;
+    }
+
+    if ((user.walletBalance || 0) < 0.3) {
+      res.status(400).json({
+        message: "Your balance is too low to run matching.",
+        reason: "insufficient_balance",
+        walletBalance: user.walletBalance || 0,
+        required: 0.3,
       });
       return;
     }
@@ -396,6 +411,45 @@ export const triggerMatchForMe = expressAsyncHandler(
       res.status(503).json({ message: "Matching service not configured" });
       return;
     }
+
+    // Atomic cooldown claim — prevents duplicate parallel dispatches
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    const claimed = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        $or: [
+          { lastManualMatchAt: { $exists: false } },
+          { lastManualMatchAt: null },
+          { lastManualMatchAt: { $lte: sixHoursAgo } },
+        ],
+      },
+      { $set: { lastManualMatchAt: new Date() } },
+      { new: false }
+    );
+
+    if (!claimed) {
+      const freshUser = await User.findById(userId);
+      const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+      const lastAt = freshUser?.lastManualMatchAt;
+      const retryAfterMinutes = lastAt
+        ? Math.max(Math.ceil((lastAt.getTime() + SIX_HOURS_MS - Date.now()) / 60000), 1)
+        : 1;
+      res.status(429).json({
+        message: "Please wait before triggering another match run.",
+        retryAfterMinutes,
+      });
+      return;
+    }
+
+    const previousLastManualMatchAt = claimed.lastManualMatchAt;
+
+    const rollbackClaim = async () => {
+      if (previousLastManualMatchAt) {
+        await User.findByIdAndUpdate(userId, { $set: { lastManualMatchAt: previousLastManualMatchAt } });
+      } else {
+        await User.findByIdAndUpdate(userId, { $unset: { lastManualMatchAt: 1 } });
+      }
+    };
 
     try {
       const response = await fetch(`${backgroundUrl}/internal/match-for-user`, {
@@ -410,17 +464,17 @@ export const triggerMatchForMe = expressAsyncHandler(
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[TRIGGER] Background service error: ${errText}`);
+        await rollbackClaim();
         res.status(502).json({ message: "Failed to start matching" });
         return;
       }
     } catch (fetchErr) {
       console.error("[TRIGGER] Could not reach background service:", fetchErr);
+      await rollbackClaim();
       res.status(502).json({ message: "Matching service unreachable" });
       return;
     }
 
-    // Only update cooldown after confirmed dispatch
-    await User.findByIdAndUpdate(userId, { lastManualMatchAt: new Date() });
     console.log(`[TRIGGER] Match run started for user ${userId}`);
     res.status(202).json({ message: "Match run started — results will appear in a few minutes" });
   }
