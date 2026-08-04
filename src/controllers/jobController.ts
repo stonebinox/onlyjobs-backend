@@ -7,6 +7,7 @@ import User from "../models/User";
 import MatchRecord from "../models/MatchRecord";
 import Transaction from "../models/Transaction";
 import { matchUserToJob } from "../services/matchingService";
+import { hasMeaningfulResume } from "../utils/resumePredicate";
 
 // @desc    Get the count of available job listings
 // @route   GET /api/jobs/available-count
@@ -43,11 +44,7 @@ export const getPublicStats = asyncHandler(
 );
 
 function hasValidResume(user: any): boolean {
-  return (
-    (user.resume?.summary && user.resume.summary.trim().length > 0) ||
-    (Array.isArray(user.resume?.skills) && user.resume.skills.length > 0) ||
-    (Array.isArray(user.resume?.experience) && user.resume.experience.length > 0)
-  );
+  return hasMeaningfulResume(user?.resume);
 }
 
 // @desc    Browse full job pool with match hydration

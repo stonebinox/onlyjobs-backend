@@ -328,6 +328,37 @@ describe('POST /api/jobs/:jobId/match — gates', () => {
     expect(res.body.error).toMatch(/upload your cv/i);
   });
 
+  it('returns 400 when user has whitespace-only resume, and creates no MatchRecord or Transaction', async () => {
+    const user = await createUser({
+      walletBalance: 1.0,
+      resume: {
+        summary: '   ',
+        skills: ['  '],
+        experience: [],
+        education: [],
+        certifications: [],
+        languages: [],
+        projects: [],
+        achievements: [],
+        volunteerExperience: [],
+        interests: [],
+      },
+    });
+    currentUser = user;
+
+    const job = await createJob();
+    const res = await request(testApp).post(`/api/jobs/${job._id}/match`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/upload your cv/i);
+
+    // Gate must fire BEFORE any MatchRecord write or wallet debit
+    const matchRecord = await MatchRecord.findOne({ userId: user._id });
+    expect(matchRecord).toBeNull();
+
+    const tx = await Transaction.findOne({ userId: user._id });
+    expect(tx).toBeNull();
+  });
+
   it('returns 400 when user has insufficient balance', async () => {
     const user = await createUser({ walletBalance: 0 });
     currentUser = user;

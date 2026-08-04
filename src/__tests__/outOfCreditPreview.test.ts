@@ -125,6 +125,22 @@ describe('GET /api/matches/out-of-credit-preview — no resume', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. shouldShow: false for whitespace-only resume
+// ---------------------------------------------------------------------------
+
+describe('GET /api/matches/out-of-credit-preview — whitespace-only resume', () => {
+  it('returns shouldShow:false with reason no_resume when resume is whitespace-only', async () => {
+    await makeUser({
+      resume: { summary: '   ', skills: ['  '], experience: [], education: [] },
+    });
+    const res = await request(testApp).get('/api/matches/out-of-credit-preview');
+    expect(res.status).toBe(200);
+    expect(res.body.shouldShow).toBe(false);
+    expect(res.body.reason).toBe('no_resume');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. shouldShow: false when matchingEnabled is false
 // ---------------------------------------------------------------------------
 

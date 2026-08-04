@@ -5,20 +5,10 @@ import JobListing from "../models/JobListing";
 import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
 import { applyPreferenceFilters } from "../utils/preferenceFilters";
+import { hasMeaningfulResume } from "../utils/resumePredicate";
 
 const DAILY_MATCH_COST = 0.3;
 const ON_DEMAND_MATCH_COST = 0.05;
-
-function hasNoResume(user: InstanceType<typeof User>): boolean {
-  const r = user.resume;
-  if (!r) return true;
-  return (
-    !r.summary &&
-    (!r.skills || r.skills.length === 0) &&
-    (!r.experience || r.experience.length === 0) &&
-    (!r.education || r.education.length === 0)
-  );
-}
 
 function sendEmpty(res: Response, reason: string, walletBalance: number): void {
   res.json({
@@ -49,7 +39,7 @@ export const getOutOfCreditPreview = expressAsyncHandler(
       return;
     }
 
-    if (hasNoResume(user)) {
+    if (!hasMeaningfulResume(user.resume)) {
       sendEmpty(res, "no_resume", balance);
       return;
     }
