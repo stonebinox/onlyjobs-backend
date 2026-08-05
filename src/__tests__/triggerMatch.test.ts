@@ -160,6 +160,28 @@ describe('POST /api/matches/trigger-for-me — cooldown (atomic)', () => {
   });
 });
 
+describe('POST /api/matches/trigger-for-me — null-claim reclassification (smoke)', () => {
+  it('returns 400 insufficient_balance not 429 when balance dropped between snapshot read and atomic claim', async () => {
+    await createTestUser({ walletBalance: 5 });
+
+    // Simulate a race: the claim is rejected (balance now ineligible), and the
+    // freshUser re-read finds walletBalance below threshold.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const racedImpl: any = async () => {
+      await User.findByIdAndUpdate(testUserId, { walletBalance: 0.1 });
+      return null;
+    };
+    const spy = jest.spyOn(User, 'findOneAndUpdate').mockImplementationOnce(racedImpl);
+
+    const res = await request(testApp).post('/api/matches/trigger-for-me');
+    spy.mockRestore();
+
+    expect(res.status).toBe(400);
+    expect(res.body.reason).toBe('insufficient_balance');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /api/matches/trigger-for-me — dispatch and rollback', () => {
   it('returns 202 and dispatches to background service when eligible', async () => {
     await createTestUser();

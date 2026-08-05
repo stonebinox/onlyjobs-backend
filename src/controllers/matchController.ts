@@ -412,11 +412,16 @@ export const triggerMatchForMe = expressAsyncHandler(
       return;
     }
 
-    // Atomic cooldown claim — prevents duplicate parallel dispatches
+    // Atomic cooldown claim — prevents duplicate parallel dispatches.
+    // Eligibility fields are folded into the filter so a raced change between
+    // the snapshot read above and this write cannot slip through.
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const claimed = await User.findOneAndUpdate(
       {
         _id: userId,
+        isVerified: true,
+        walletBalance: { $gte: 0.3 },
+        "preferences.matchingEnabled": { $ne: false },
         $or: [
           { lastManualMatchAt: { $exists: false } },
           { lastManualMatchAt: null },
@@ -428,9 +433,41 @@ export const triggerMatchForMe = expressAsyncHandler(
     );
 
     if (!claimed) {
+      // Re-read to classify: null can mean cooldown OR a raced eligibility change.
       const freshUser = await User.findById(userId);
+      if (!freshUser) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      if (!freshUser.isVerified) {
+        res.status(403).json({ message: "Verify your email to run matching.", reason: "unverified" });
+        return;
+      }
+
+      if (!hasMeaningfulResume(freshUser.resume)) {
+        res.status(400).json({ message: "Add your CV to run matching.", reason: "no_resume" });
+        return;
+      }
+
+      if (freshUser.preferences?.matchingEnabled === false) {
+        res.status(400).json({ message: "Matching is turned off in your settings.", reason: "matching_disabled" });
+        return;
+      }
+
+      if ((freshUser.walletBalance || 0) < 0.3) {
+        res.status(400).json({
+          message: "Your balance is too low to run matching.",
+          reason: "insufficient_balance",
+          walletBalance: freshUser.walletBalance || 0,
+          required: 0.3,
+        });
+        return;
+      }
+
+      // Genuine cooldown — all eligibility conditions still satisfied.
       const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
-      const lastAt = freshUser?.lastManualMatchAt;
+      const lastAt = freshUser.lastManualMatchAt;
       const retryAfterMinutes = lastAt
         ? Math.max(Math.ceil((lastAt.getTime() + SIX_HOURS_MS - Date.now()) / 60000), 1)
         : 1;
@@ -450,6 +487,15 @@ export const triggerMatchForMe = expressAsyncHandler(
         await User.findByIdAndUpdate(userId, { $unset: { lastManualMatchAt: 1 } });
       }
     };
+
+    // Resume is a JS predicate and cannot live in the atomic filter, so revalidate
+    // it against the atomically-claimed pre-image and roll back if the resume was
+    // cleared between the snapshot read and the claim.
+    if (!hasMeaningfulResume(claimed.resume)) {
+      await rollbackClaim();
+      res.status(400).json({ message: "Add your CV to run matching.", reason: "no_resume" });
+      return;
+    }
 
     try {
       const response = await fetch(`${backgroundUrl}/internal/match-for-user`, {
