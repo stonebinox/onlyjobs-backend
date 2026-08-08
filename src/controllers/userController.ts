@@ -653,14 +653,22 @@ export const updateUserProfile = asyncHandler(
       user.name = name;
     }
 
-    // Update currentLocation if provided
+    // Update currentLocation if provided (null or "" to clear)
     if (currentLocation !== undefined) {
-      if (typeof currentLocation !== "string") {
+      if (currentLocation !== null && typeof currentLocation !== "string") {
         res.status(400);
-        throw new Error("currentLocation must be a string");
+        throw new Error("currentLocation must be a string or null");
       }
-      const trimmed = currentLocation.trim();
-      user.currentLocation = trimmed === "" ? undefined : trimmed;
+      if (currentLocation === null || currentLocation === "") {
+        user.currentLocation = undefined;
+      } else {
+        const trimmed = (currentLocation as string).trim();
+        if (trimmed.length > 100) {
+          res.status(400);
+          throw new Error("currentLocation must be 100 characters or fewer");
+        }
+        user.currentLocation = trimmed || undefined;
+      }
     }
 
     // Handle resume updates if provided
