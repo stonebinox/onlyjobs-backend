@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
+import mongoose from "mongoose";
 
 import { processMessage, checkRateLimit } from "../services/chatService";
 import ChatConversation from "../models/ChatConversation";
 import ChatMemory from "../models/ChatMemory";
+import MatchRecord from "../models/MatchRecord";
 
 // @desc    Send a message to the AI chat
 // @route   POST /api/chat/
@@ -30,11 +32,11 @@ export const sendMessage = expressAsyncHandler(
 
       res.json({ reply: result.reply, conversationId: result.conversationId });
     } catch (error: any) {
-      const message = error?.message || 'Chat processing failed';
-      if (message === 'Conversation not found') {
-        res.status(404).json({ error: message });
+      const errorMessage = error?.message || 'Chat processing failed';
+      if (errorMessage === 'Conversation not found' || error?.statusCode === 404) {
+        res.status(404).json({ error: errorMessage });
       } else {
-        res.status(500).json({ error: message });
+        res.status(500).json({ error: errorMessage });
       }
       return;
     }
@@ -48,7 +50,7 @@ export const getConversations = expressAsyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user!._id;
 
-    const conversations = await ChatConversation.find({ userId })
+    const conversations = await ChatConversation.find({ userId, contextType: { $ne: "job" } })
       .select("title createdAt updatedAt")
       .sort({ updatedAt: -1 })
       .limit(50);
@@ -99,5 +101,60 @@ export const deleteMemory = expressAsyncHandler(
     await ChatMemory.deleteOne({ userId });
 
     res.json({ deleted: true });
+  }
+);
+
+// @desc    Find or create a per-job contextual conversation (one per match)
+// @route   POST /api/chat/conversations
+// @access  Private
+export const upsertJobConversation = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+    const { contextType, contextMatchId } = req.body;
+
+    if (contextType !== "job") {
+      res.status(400).json({ error: "contextType must be 'job'" });
+      return;
+    }
+
+    if (!contextMatchId || !mongoose.Types.ObjectId.isValid(String(contextMatchId))) {
+      res.status(400).json({ error: "contextMatchId must be a valid ObjectId" });
+      return;
+    }
+
+    const matchObjectId = new mongoose.Types.ObjectId(String(contextMatchId));
+
+    // Validate ownership — never trust client-supplied job data
+    const match = await MatchRecord.findOne({ _id: matchObjectId, userId });
+    if (!match) {
+      res.status(404).json({ error: "Match not found" });
+      return;
+    }
+
+    let conversation;
+    try {
+      conversation = await ChatConversation.findOneAndUpdate(
+        { userId, contextType: "job", contextMatchId: matchObjectId },
+        { $setOnInsert: { userId, contextType: "job", contextMatchId: matchObjectId, title: "", messages: [] } },
+        { upsert: true, new: true }
+      );
+    } catch (err: any) {
+      // Handle duplicate-key race from concurrent drawer opens
+      if (err.code === 11000) {
+        conversation = await ChatConversation.findOne({ userId, contextType: "job", contextMatchId: matchObjectId });
+      } else {
+        throw err;
+      }
+    }
+
+    if (!conversation) {
+      res.status(500).json({ error: "Failed to create or find conversation" });
+      return;
+    }
+
+    res.json({
+      conversationId: String(conversation._id),
+      messages: conversation.messages,
+    });
   }
 );

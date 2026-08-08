@@ -772,6 +772,37 @@ describe('chatService profile context injection', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Chat Service — general-chat invariants (onlyjobs-78n Gap 2)
+//   Contract: a GENERAL (non-job) send must use model gpt-4o-mini and must
+//   NOT inject a <job_match_context> block into the system prompt.
+//   These assert the "additive-only / model unchanged" guarantee directly
+//   rather than relying on code review.
+// ---------------------------------------------------------------------------
+
+describe('chatService general-chat invariants', () => {
+  it('uses model gpt-4o-mini for a general (non-job) send', async () => {
+    await processMessage(testUserId.toString(), 'Hello, how can you help me?');
+
+    // The main completion call (no tool calls in this simple path) is the first call.
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const callArgs = mockCreate.mock.calls[0][0] as any;
+    expect(callArgs.model).toBe('gpt-4o-mini');
+  });
+
+  it('system prompt does not contain <job_match_context> for a general (non-job) send', async () => {
+    await processMessage(testUserId.toString(), 'Can you help me write a cover letter?');
+
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const callArgs = mockCreate.mock.calls[0][0] as any;
+    const systemMsg = (callArgs.messages as any[]).find((m: any) => m.role === 'system');
+    expect(systemMsg).toBeDefined();
+    // Job context block is only injected for job-contextType conversations.
+    // A fresh general conversation must never carry <job_match_context>.
+    expect(systemMsg.content).not.toContain('<job_match_context>');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Chat Service — get_user_profile_summary returns full Q&A
 // ---------------------------------------------------------------------------
 
