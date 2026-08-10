@@ -200,6 +200,15 @@ export const updateUserCV = asyncHandler(
       fs.writeFileSync(filePath, file.buffer);
       const parsedCV = await parseUserCV(filePath);
 
+      if (!parsedCV) {
+        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* best-effort cleanup */ }
+        res.status(422).json({
+          success: false,
+          message: "We couldn't read that CV. Please try another PDF or DOCX file.",
+        });
+        return;
+      }
+
       const parsed = parsedCV.preferences ?? {};
       const ALLOWED = [
         "jobTypes",

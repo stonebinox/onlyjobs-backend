@@ -265,16 +265,19 @@ describe("l5j: CV upload with empty/whitespace resume does NOT reset (criterion 
     expect(updated!.lastNoResumeReminderAt).toBeDefined();
   });
 
-  test("parseUserCV returns null (parse failure): count stays unchanged", async () => {
+  test("parseUserCV returns null (parse failure): status is 422 AND count stays unchanged", async () => {
     parseUserCVMock.mockResolvedValue(null);
     const { user, token } = await createUserWithReminderState({ noResumeReminderCount: 2 });
 
     const dummyPDF = Buffer.from('%PDF-1.4 minimal test');
-    // Expect either 400/500 (parse failure) or 200 — either way count must not reset
-    await request(testApp)
+    // Contract (rme fix): null parse → exactly 422, and count must not reset.
+    const res = await request(testApp)
       .post('/api/users/cv')
       .set('Authorization', `Bearer ${token}`)
       .attach('file', dummyPDF, { filename: 'bad.pdf', contentType: 'application/pdf' });
+
+    // FINDING if not 422: handler returned 500 (unfixed) or 200 (writes-on-null).
+    expect(res.status).toBe(422);
 
     const updated = await User.findById(user._id);
     expect(updated!.noResumeReminderCount).toBe(2);
