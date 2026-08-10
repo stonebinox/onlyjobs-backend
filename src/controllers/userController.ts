@@ -25,6 +25,8 @@ import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { deleteAllMatches } from "../services/matchingService";
 import MatchRecord from "../models/MatchRecord";
 import JobListing, { IJobListing } from "../models/JobListing";
+import { hasMeaningfulResume } from "../utils/resumePredicate";
+import { resetNoResumeReminderState } from "../utils/resumeState";
 import {
   sendEmailChangeVerificationEmail,
   sendInitialVerificationEmail,
@@ -224,6 +226,10 @@ export const updateUserCV = asyncHandler(
       if (!updatedUser) {
         res.status(404);
         throw new Error("User not found");
+      }
+
+      if (hasMeaningfulResume(parsedCV.resume)) {
+        await resetNoResumeReminderState(userId);
       }
 
       res.status(200).json({
@@ -740,6 +746,10 @@ export const updateUserProfile = asyncHandler(
     }
 
     await user.save();
+
+    if (resume !== undefined && hasMeaningfulResume(user.resume)) {
+      await resetNoResumeReminderState(userId);
+    }
 
     res.status(200).json({
       success: true,
