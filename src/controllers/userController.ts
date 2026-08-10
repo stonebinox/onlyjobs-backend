@@ -187,6 +187,7 @@ export const updateUserCV = asyncHandler(
       throw new Error("Please upload a PDF or Word document");
     }
 
+    let filePath: string | undefined;
     try {
       const uploadDir = path.join(__dirname, "../../uploads/cvs");
 
@@ -196,12 +197,11 @@ export const updateUserCV = asyncHandler(
 
       const fileExtension = path.extname(file.originalname);
       const fileName = `${userId}-${Date.now()}${fileExtension}`;
-      const filePath = path.join(uploadDir, fileName);
+      filePath = path.join(uploadDir, fileName);
       fs.writeFileSync(filePath, file.buffer);
       const parsedCV = await parseUserCV(filePath);
 
       if (!parsedCV) {
-        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* best-effort cleanup */ }
         res.status(422).json({
           success: false,
           message: "We couldn't read that CV. Please try another PDF or DOCX file.",
@@ -249,6 +249,10 @@ export const updateUserCV = asyncHandler(
       console.error("Error saving CV:", error);
       res.status(500);
       throw new Error("Error saving CV");
+    } finally {
+      if (filePath) {
+        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* best-effort cleanup */ }
+      }
     }
   }
 );

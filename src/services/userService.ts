@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 import fs, { ReadStream } from "fs";
-import { promisify } from "util";
 import path from "path";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
@@ -36,7 +35,6 @@ export const getUserNameById = async (id: string) => {
   return "-";
 };
 
-const unlinkAsync = promisify(fs.unlink);
 const MAX_TOKENS = 80000;
 
 export const parseUserCV = async (uploadedFilePath: string) => {
@@ -82,8 +80,6 @@ export const parseUserCV = async (uploadedFilePath: string) => {
     if (!match) throw new Error("No JSON found in output");
 
     const parsed = JSON.parse(match[0]);
-
-    await unlinkAsync(uploadedFilePath); // cleanup uploaded file
 
     return parsed;
   } catch (e) {
