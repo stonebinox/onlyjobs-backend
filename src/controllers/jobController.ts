@@ -8,6 +8,7 @@ import MatchRecord from "../models/MatchRecord";
 import Transaction from "../models/Transaction";
 import { matchUserToJob } from "../services/matchingService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
+import { captureLifecycleEvent } from "../services/analyticsService";
 
 // @desc    Get the count of available job listings
 // @route   GET /api/jobs/available-count
@@ -215,6 +216,8 @@ export const matchJobOnDemand = asyncHandler(async (req: Request, res: Response)
   } catch (err) {
     console.error("Failed to create transaction record:", err);
   }
+
+  captureLifecycleEvent(updated, "on_demand_match");
 
   res.json({
     success: true,

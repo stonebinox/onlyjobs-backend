@@ -9,6 +9,7 @@ import {
   fetchOrder,
 } from "../services/razorpayService";
 import { reconcilePostCreditWalletState } from "../utils/walletState";
+import { captureLifecycleEvent } from "../services/analyticsService";
 
 /**
  * Get current wallet balance for authenticated user
@@ -138,6 +139,7 @@ export const verifyAndCreditWallet = asyncHandler(
     user.walletBalance = (user.walletBalance || 0) + transaction.amount;
     await user.save();
     await reconcilePostCreditWalletState(user._id);
+    captureLifecycleEvent(user, "wallet_topup_completed");
 
     res.json({
       success: true,
@@ -365,6 +367,7 @@ export const handleRazorpayWebhook = asyncHandler(
                   walletCreditedAt: new Date(),
                 };
                 await transaction.save();
+                captureLifecycleEvent(user, "wallet_topup_completed");
 
                 console.log(
                   `Wallet credited via webhook for user ${user._id}: $${transaction.amount}`
@@ -492,6 +495,7 @@ export const syncTransactionStatus = asyncHandler(
           walletCreditedAt: new Date(),
         };
         await transaction.save();
+        captureLifecycleEvent(user, "wallet_topup_completed");
       }
 
       res.json({

@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 
 import User, { IUser } from "../models/User";
+import { captureLifecycleEvent } from "../services/analyticsService";
 import Transaction from "../models/Transaction";
 import {
   answerQuestion,
@@ -1218,6 +1219,7 @@ export const verifyInitialEmail = asyncHandler(
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
+    captureLifecycleEvent(user, "email_verified");
 
     // Send admin notification (non-blocking)
     sendAdminUserVerifiedEmail(user.email, false).catch((err) => {
