@@ -24,7 +24,7 @@ export const sendMessage = expressAsyncHandler(
       const withinLimit = await checkRateLimit(userId);
       if (!withinLimit) {
         console.log('[Chat] Rate limit hit for user:', userId.toString());
-        res.status(429).json({ error: "Rate limit exceeded. Maximum 20 messages per hour." });
+        res.status(429).json({ error: "Rate limit exceeded. Maximum 50 messages per hour." });
         return;
       }
 

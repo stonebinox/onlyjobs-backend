@@ -152,6 +152,12 @@ const QNA_SHOW_ALL_PER_ANSWER_CAP = 300;
 const QNA_SHOW_ALL_BLOCK_MAX = 8000;
 const QNA_SCORE_THRESHOLD = 1;
 
+// Full Q&A injection for general conversations
+const QNA_FULL_PER_ANSWER_CAP = 2000;
+// gpt-5-mini has a very large context window; 120000 chars is a small fraction and fits
+// ~60 answers at the per-answer cap, covering realistic users fully without dropping any.
+const QNA_FULL_BLOCK_MAX = 120000;
+
 const STOPWORDS = new Set([
   "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
   "have", "has", "had", "do", "does", "did", "will", "would", "could",
@@ -296,6 +302,31 @@ function buildRelevantQnaBlock(
     totalChars += entry.length + 2;
   }
 
+  return lines.join("\n\n");
+}
+
+function buildFullQnaBlock(qnaEntries: QnaEntry[]): string {
+  const answered = qnaEntries.filter(
+    (item) => item.skipped !== true && item.answer && item.answer.trim() !== ""
+  );
+  if (answered.length === 0) return "";
+  const lines: string[] = [];
+  let totalChars = 0;
+  let dropped = 0;
+  for (const item of answered) {
+    const q = questions.find((qq) => qq.id === item.questionId);
+    const questionText = q?.question || q?.category || item.questionId;
+    const raw = item.answer ?? "";
+    const answer = raw.length > QNA_FULL_PER_ANSWER_CAP ? raw.slice(0, QNA_FULL_PER_ANSWER_CAP) + "..." : raw;
+    const entry = questionText ? `Q: ${questionText}\nA: ${answer}` : `A: ${answer}`;
+    if (totalChars + entry.length > QNA_FULL_BLOCK_MAX) { dropped++; continue; }
+    lines.push(entry);
+    totalChars += entry.length + 2;
+  }
+  if (dropped > 0) {
+    lines.push(`[${dropped} older answer${dropped === 1 ? "" : "s"} omitted for length]`);
+    console.log(`[Chat] Q&A full block: dropped ${dropped} entries due to budget`);
+  }
   return lines.join("\n\n");
 }
 
@@ -511,6 +542,15 @@ When drafting application answers:
 - Match the tone and style of the user's existing Q&A answers when available
 
 Your personality: friendly, concise, and actionable. Give specific advice the user can act on. Avoid vague suggestions.
+
+CRITICAL — grounding and honesty (highest priority):
+- Facts about the user's career, employers, projects, and history may ONLY come from the profile and Q&A data provided below, from tool results, or from what the user tells you in this conversation.
+- If a specific detail is NOT present in that data (e.g. what a company's product did, a project's purpose, dates, metrics), DO NOT invent, infer, or guess it. Say plainly that it isn't in their profile/Q&A and ask them to tell you.
+- "Not in the profile" does not mean "not true" — never contradict the user or state something about their history as fact unless it is grounded in the provided data or their own words.
+- If the user corrects you, their correction is authoritative — it overrides any saved memory or earlier assumption.
+- A grounded answer that asks one clarifying question is always better than a confident, fabricated one. Never pad an answer with invented specifics to make it sound complete.
+- The user profile and Q&A data provided in this prompt is the AUTHORITATIVE source of truth about the user's history.
+- Saved memory (the "What I know about you" list), earlier-conversation summaries, and previous assistant messages may be OUTDATED or contain earlier mistakes. If anything there conflicts with the current profile/Q&A data or with what the user says now, TRUST the current profile/Q&A data and the user, and disregard the stale claim.
 
 When you learn something important about the user (their target role, salary expectations, preferred industries, frustrations, goals), use the save_memory tool to remember it for future conversations. Use save_memory when you learn something new about the user. Use update_memory when you need to correct or update an existing memory.
 
@@ -852,12 +892,21 @@ export async function processMessage(
 
   let qnaBlock: string | undefined;
   if (qnaRetrievalEnabled && qnaEntries.length > 0) {
-    const showAll = detectShowAllQna(message);
-    const block = buildRelevantQnaBlock(qnaEntries, message, prevUserMessage, showAll);
-    if (block) {
-      qnaBlock = block;
-      const entryCount = (block.match(/^Q:/gm) ?? []).length;
-      console.log(`[Chat] Q&A retrieval: showAll=${showAll}, candidates=${qnaEntries.length}, injected=${entryCount} entries (${block.length} chars)`);
+    if (conversation.contextType !== "job") {
+      const block = buildFullQnaBlock(qnaEntries);
+      if (block) {
+        qnaBlock = block;
+        const entryCount = (block.match(/^[QA]:/gm) ?? []).length;
+        console.log(`[Chat] Q&A retrieval: mode=full, candidates=${qnaEntries.length}, injected=${entryCount} entries (${block.length} chars)`);
+      }
+    } else {
+      const showAll = detectShowAllQna(message);
+      const block = buildRelevantQnaBlock(qnaEntries, message, prevUserMessage, showAll);
+      if (block) {
+        qnaBlock = block;
+        const entryCount = (block.match(/^Q:/gm) ?? []).length;
+        console.log(`[Chat] Q&A retrieval: showAll=${showAll}, candidates=${qnaEntries.length}, injected=${entryCount} entries (${block.length} chars)`);
+      }
     }
   }
 
@@ -917,7 +966,7 @@ export async function processMessage(
     iterations++;
 
     const response = await withTimeout(getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini",
+      model: process.env.GPT_MODEL || "gpt-5-mini",
       messages: openaiMessages,
       tools: TOOLS,
       tool_choice: "auto",
