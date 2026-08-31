@@ -112,10 +112,52 @@ export function isJobSalaryTooLow(job: JobForFiltering, minSalary?: number): boo
   return job.salary.max < minSalary;
 }
 
+function normLoc(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Whole-value match only — a city containing one of these words does NOT qualify.
+const OPEN_LOCATION_VALUES = new Set([
+  "worldwide",
+  "global",
+  "anywhere",
+  "anywhere in the world",
+  "everywhere",
+  "work from anywhere",
+  "remote worldwide",
+  "worldwide remote",
+]);
+
+// A pref entry that signals "remote anywhere" rather than a specific geography.
+const AGNOSTIC_PREF_VALUES = new Set([
+  "remote",
+  "anywhere",
+  "everywhere",
+  "worldwide",
+  "global",
+  "wfh",
+  "fully remote",
+  "work from home",
+  "work from anywhere",
+  "remote worldwide",
+]);
+
+function isGloballyOpenLocation(jobLocations: string[]): boolean {
+  return jobLocations.some((loc) => OPEN_LOCATION_VALUES.has(normLoc(loc)));
+}
+
+// True only when EVERY non-empty pref entry is a remote/open indicator (no specific geography).
+function isGloballyAgnosticPref(userLocations: string[]): boolean {
+  const nonEmpty = userLocations.map(normLoc).filter((s) => s.length > 0);
+  return nonEmpty.length > 0 && nonEmpty.every((s) => AGNOSTIC_PREF_VALUES.has(s));
+}
+
 /**
  * Returns true when the job should be SKIPPED for location reasons.
  * No filter when: user has no location preferences, or job has no location.
- * Matching is case-insensitive substring in BOTH directions.
+ * Globally-open jobs (worldwide/anywhere/global) are never skipped.
+ * Users whose prefs consist entirely of remote/open indicators bypass geo-filtering.
+ * Otherwise: case-insensitive bidirectional substring match over non-empty entries.
  */
 export function isJobLocationMismatch(job: JobForFiltering, userLocations?: string[]): boolean {
   if (!userLocations || userLocations.length === 0) {
@@ -126,8 +168,17 @@ export function isJobLocationMismatch(job: JobForFiltering, userLocations?: stri
     return false;
   }
 
-  const jobLocsLower = job.location.map((loc) => loc.toLowerCase());
-  const userLocsLower = userLocations.map((loc) => loc.toLowerCase());
+  const filteredUserLocs = userLocations.filter((loc) => loc.trim().length > 0);
+  const filteredJobLocs = job.location.filter((loc) => loc.trim().length > 0);
+
+  if (filteredUserLocs.length === 0) return false;
+  if (filteredJobLocs.length === 0) return false;
+
+  if (isGloballyAgnosticPref(filteredUserLocs)) return false;
+  if (isGloballyOpenLocation(filteredJobLocs)) return false;
+
+  const jobLocsLower = filteredJobLocs.map((loc) => loc.toLowerCase());
+  const userLocsLower = filteredUserLocs.map((loc) => loc.toLowerCase());
 
   for (const jobLoc of jobLocsLower) {
     for (const userLoc of userLocsLower) {
