@@ -369,7 +369,7 @@ export const sendMatchingDisabledEmail = async (user: IUser): Promise<boolean> =
 };
 
 // Admin email address for notifications
-const ADMIN_EMAIL = "contact@onlyjobs.app";
+const ADMIN_EMAIL = "contact@auroradesignshq.com";
 
 export const sendAdminUserVerifiedEmail = async (
   userEmail: string,
