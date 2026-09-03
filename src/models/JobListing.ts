@@ -15,10 +15,17 @@ export interface IJobListing extends Document {
   description: string;
   url: string;
   sourceUrl?: string; // Original URL from the source (e.g., WWR URL before resolution)
+  dedupKey: string; // Normalized url (trim+lowercase) of the final persisted url; unique-indexed
   postedDate: Date;
   scrapedDate: Date;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Normalized dedup key: trim+lowercase of the final persisted url. No query-string stripping,
+// trailing-slash normalization, or redirect resolution — only trim+lowercase.
+export function computeDedupKey(url: string): string {
+  return url.trim().toLowerCase();
 }
 
 const JobListingSchema: Schema = new Schema(
@@ -37,10 +44,17 @@ const JobListingSchema: Schema = new Schema(
     description: { type: String, required: true },
     url: { type: String, required: true },
     sourceUrl: { type: String }, // Original URL from source before resolution (optional)
+    dedupKey: { type: String }, // Set on every insert; backfilled by migration for pre-existing docs
     postedDate: Date,
     scrapedDate: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  // autoIndex: false — deploying this schema must NOT auto-attempt to build the unique dedupKey
+  // index, which would fail against pre-existing duplicate rows. The index is built explicitly
+  // by scripts/migrate-joblisting-dedupkey.mjs after duplicate reconciliation.
+  { timestamps: true, autoIndex: false }
 );
+
+// Unique index on dedupKey. Built by migration after duplicate reconciliation, not auto-built.
+JobListingSchema.index({ dedupKey: 1 }, { unique: true });
 
 export default mongoose.model<IJobListing>("JobListing", JobListingSchema);
