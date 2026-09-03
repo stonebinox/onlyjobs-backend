@@ -57,11 +57,11 @@ const JobListingSchema: Schema = new Schema(
 // Unique index on dedupKey. Built by migration after duplicate reconciliation, not auto-built.
 JobListingSchema.index({ dedupKey: 1 }, { unique: true, partialFilterExpression: { dedupKey: { $type: "string", $gt: "" } } });
 
-// Belt-and-suspenders: if a caller omits dedupKey (e.g. a future insert path), derive it from url
-// before persisting.  The unique partial index is the enforcer; this hook is the invariant guard.
-// Covers .save() and .create() — insertMany/bulkWrite bypass hooks (confirmed: no such paths exist).
+// Invariant enforcement: dedupKey === computeDedupKey(url) for every .save()/.create().
+// Always overrides any caller-supplied dedupKey — a wrong non-empty key would bypass the unique index.
+// insertMany/bulkWrite bypass hooks (confirmed: no such paths exist).
 JobListingSchema.pre<IJobListing>("save", function (next) {
-  if ((!this.dedupKey || this.dedupKey === "") && typeof this.url === "string" && this.url !== "") {
+  if (typeof this.url === "string" && this.url !== "") {
     this.dedupKey = computeDedupKey(this.url);
   }
   next();
