@@ -44,7 +44,7 @@ const JobListingSchema: Schema = new Schema(
     description: { type: String, required: true },
     url: { type: String, required: true },
     sourceUrl: { type: String }, // Original URL from source before resolution (optional)
-    dedupKey: { type: String }, // Set on every insert; backfilled by migration for pre-existing docs
+    dedupKey: { type: String }, // Every insert MUST set this via computeDedupKey(url); the unique index is on dedupKey, not url
     postedDate: Date,
     scrapedDate: { type: Date, default: Date.now },
   },
@@ -55,6 +55,6 @@ const JobListingSchema: Schema = new Schema(
 );
 
 // Unique index on dedupKey. Built by migration after duplicate reconciliation, not auto-built.
-JobListingSchema.index({ dedupKey: 1 }, { unique: true });
+JobListingSchema.index({ dedupKey: 1 }, { unique: true, partialFilterExpression: { dedupKey: { $type: "string", $gt: "" } } });
 
 export default mongoose.model<IJobListing>("JobListing", JobListingSchema);
