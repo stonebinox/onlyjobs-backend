@@ -24,7 +24,21 @@ export interface IJobListing extends Document {
 
 // Normalized dedup key: trim+lowercase of the final persisted url. No query-string stripping,
 // trailing-slash normalization, or redirect resolution — only trim+lowercase.
+// Exception (onlyjobs-ydj): himalayas.app URLs carry a volatile trailing -<digits> suffix that
+// changes nightly for the same logical job. Strip it before lowercasing so the key is stable.
 export function computeDedupKey(url: string): string {
+  try {
+    const trimmed = url.trim();
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === "himalayas.app" || parsed.hostname === "www.himalayas.app") {
+      // Strip -\d{7,} from the end of the LAST path segment only (before any trailing slash).
+      // The 7-digit floor preserves short legit slug numbers like "-2024".
+      parsed.pathname = parsed.pathname.replace(/-\d{7,}(\/?)$/, "$1");
+      return parsed.toString().toLowerCase();
+    }
+  } catch {
+    // malformed URL — fall through to plain trim+lowercase
+  }
   return url.trim().toLowerCase();
 }
 
