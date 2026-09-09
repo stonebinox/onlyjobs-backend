@@ -31,6 +31,7 @@ export function computeDedupKey(url: string): string {
     const trimmed = url.trim();
     const parsed = new URL(trimmed);
     if (parsed.hostname === "himalayas.app" || parsed.hostname === "www.himalayas.app") {
+      parsed.hostname = "himalayas.app"; // normalize www vs non-www
       // Strip -\d{7,} from the end of the LAST path segment only (before any trailing slash).
       // The 7-digit floor preserves short legit slug numbers like "-2024".
       parsed.pathname = parsed.pathname.replace(/-\d{7,}(\/?)$/, "$1");
