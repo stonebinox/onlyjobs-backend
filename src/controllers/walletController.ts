@@ -237,6 +237,51 @@ export const cancelPaymentOrder = asyncHandler(
 );
 
 /**
+ * Record a non-terminal failure attempt from the client.
+ * Called immediately on payment.failed while the modal is still open (user may retry).
+ * Does NOT change transaction.status — keeps it pending so a later success can credit.
+ */
+export const recordFailureAttempt = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { orderId, errorCode, errorDescription, errorReason } = req.body;
+    const userId = req.user!._id;
+
+    if (!orderId) {
+      res.status(400);
+      throw new Error("Order ID is required");
+    }
+
+    const updated = await Transaction.findOneAndUpdate(
+      { userId, razorpayOrderId: orderId, status: "pending" },
+      {
+        $set: {
+          "metadata.lastFailure": {
+            errorCode,
+            errorReason,
+            errorDescription,
+            at: new Date(),
+          },
+        },
+        $inc: { "metadata.failedAttempts": 1 },
+      }
+    );
+
+    if (!updated) {
+      res.json({
+        success: true,
+        message: "Transaction not found or already processed",
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: "Failure attempt recorded",
+    });
+  }
+);
+
+/**
  * Handle payment failure from client
  * Called when Razorpay returns a payment failure
  */

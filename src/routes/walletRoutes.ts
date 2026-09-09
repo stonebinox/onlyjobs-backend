@@ -6,6 +6,7 @@ import {
   getTransactions,
   cancelPaymentOrder,
   handlePaymentFailure,
+  recordFailureAttempt,
   handleRazorpayWebhook,
   syncTransactionStatus,
 } from "../controllers/walletController";
@@ -30,6 +31,7 @@ router.get("/transactions", protect, getTransactions);
 // Payment failure handling routes
 router.post("/cancel-order", protect, cancelPaymentOrder);
 router.post("/payment-failed", protect, handlePaymentFailure);
+router.post("/record-failure-attempt", protect, recordFailureAttempt);
 
 // Transaction sync route - for manual verification
 router.get("/sync/:orderId", protect, syncTransactionStatus);
