@@ -9,7 +9,7 @@ import {
   fetchOrder,
 } from "../services/razorpayService";
 import { reconcilePostCreditWalletState } from "../utils/walletState";
-import { captureLifecycleEvent } from "../services/analyticsService";
+import { creditTransactionOnce } from "../utils/creditWallet";
 
 /**
  * Get current wallet balance for authenticated user
@@ -106,46 +106,37 @@ export const verifyAndCreditWallet = asyncHandler(
       throw new Error("Invalid payment signature");
     }
 
-    // Find pending transaction
-    const transaction = await Transaction.findOne({
-      userId,
-      razorpayOrderId: orderId,
-      status: "pending",
-    });
-
-    if (!transaction) {
+    // Confirm the order belongs to this user (404 only if genuinely absent)
+    const txn = await Transaction.findOne({ userId, razorpayOrderId: orderId });
+    if (!txn) {
       res.status(404);
-      throw new Error("Transaction not found or already processed");
+      throw new Error("Transaction not found");
     }
 
-    // Update transaction with payment details
-    transaction.razorpayPaymentId = paymentId;
-    transaction.razorpaySignature = signature;
-    transaction.status = "completed";
-    transaction.metadata = {
-      ...transaction.metadata,
-      paymentId,
-      verifiedAt: new Date(),
-    };
-    await transaction.save();
+    // Persist signature as non-gating audit data
+    await Transaction.updateOne(
+      { _id: txn._id },
+      { $set: { razorpaySignature: signature, "metadata.verifiedAt": new Date() } }
+    );
 
-    // Credit wallet
-    const user = await User.findById(userId);
-    if (!user) {
-      res.status(404);
-      throw new Error("User not found");
+    const result = await creditTransactionOnce(orderId, { paymentId, source: "verify" });
+
+    if (result.credited) {
+      await reconcilePostCreditWalletState(userId);
+      res.json({
+        success: true,
+        message: "Payment verified and wallet credited",
+        newBalance: result.newBalance,
+      });
+    } else {
+      // Already credited by another path — idempotent success
+      const user = await User.findById(userId);
+      res.json({
+        success: true,
+        message: "Payment already processed",
+        newBalance: user?.walletBalance ?? 0,
+      });
     }
-
-    user.walletBalance = (user.walletBalance || 0) + transaction.amount;
-    await user.save();
-    await reconcilePostCreditWalletState(user._id);
-    captureLifecycleEvent(user, "wallet_topup_completed");
-
-    res.json({
-      success: true,
-      message: "Payment verified and wallet credited",
-      newBalance: user.walletBalance,
-    });
   }
 );
 
@@ -204,30 +195,25 @@ export const cancelPaymentOrder = asyncHandler(
       throw new Error("Order ID is required");
     }
 
-    const transaction = await Transaction.findOne({
-      userId,
-      razorpayOrderId: orderId,
-      status: "pending",
-    });
+    const updated = await Transaction.findOneAndUpdate(
+      { userId, razorpayOrderId: orderId, status: "pending" },
+      {
+        $set: {
+          status: "failed",
+          "metadata.failedAt": new Date(),
+          "metadata.failureReason": reason || "User cancelled payment",
+          "metadata.cancelledBy": "client",
+        },
+      }
+    );
 
-    if (!transaction) {
-      // Transaction might already be processed or doesn't exist
-      // Return success anyway to avoid client-side errors
+    if (!updated) {
       res.json({
         success: true,
         message: "Transaction not found or already processed",
       });
       return;
     }
-
-    transaction.status = "failed";
-    transaction.metadata = {
-      ...transaction.metadata,
-      failedAt: new Date(),
-      failureReason: reason || "User cancelled payment",
-      cancelledBy: "client",
-    };
-    await transaction.save();
 
     res.json({
       success: true,
@@ -295,30 +281,27 @@ export const handlePaymentFailure = asyncHandler(
       throw new Error("Order ID is required");
     }
 
-    const transaction = await Transaction.findOne({
-      userId,
-      razorpayOrderId: orderId,
-      status: "pending",
-    });
+    const updated = await Transaction.findOneAndUpdate(
+      { userId, razorpayOrderId: orderId, status: "pending" },
+      {
+        $set: {
+          status: "failed",
+          "metadata.failedAt": new Date(),
+          "metadata.failureReason": errorDescription || "Payment failed",
+          "metadata.errorCode": errorCode,
+          "metadata.errorReason": errorReason,
+          "metadata.cancelledBy": "razorpay_client",
+        },
+      }
+    );
 
-    if (!transaction) {
+    if (!updated) {
       res.json({
         success: true,
         message: "Transaction not found or already processed",
       });
       return;
     }
-
-    transaction.status = "failed";
-    transaction.metadata = {
-      ...transaction.metadata,
-      failedAt: new Date(),
-      failureReason: errorDescription || "Payment failed",
-      errorCode,
-      errorReason,
-      cancelledBy: "razorpay_client",
-    };
-    await transaction.save();
 
     res.json({
       success: true,
@@ -386,41 +369,24 @@ export const handleRazorpayWebhook = asyncHandler(
             break;
           }
 
-          // Only update if not already completed (idempotency)
-          if (transaction.status !== "completed") {
-            transaction.status = "completed";
-            transaction.razorpayPaymentId =
-              paymentId || transaction.razorpayPaymentId;
-            transaction.metadata = {
-              ...transaction.metadata,
-              webhookConfirmedAt: new Date(),
-              webhookEvent: eventType,
-            };
-            await transaction.save();
-
-            // Credit wallet if not already done
-            const user = await User.findById(transaction.userId);
-            if (user) {
-              // Check if wallet was already credited by checking metadata
-              if (!transaction.metadata?.walletCredited) {
-                user.walletBalance =
-                  (user.walletBalance || 0) + transaction.amount;
-                await user.save();
-                await reconcilePostCreditWalletState(user._id);
-
-                transaction.metadata = {
-                  ...transaction.metadata,
-                  walletCredited: true,
-                  walletCreditedAt: new Date(),
-                };
-                await transaction.save();
-                captureLifecycleEvent(user, "wallet_topup_completed");
-
-                console.log(
-                  `Wallet credited via webhook for user ${user._id}: $${transaction.amount}`
-                );
-              }
+          // Store webhook audit metadata (non-gating)
+          await Transaction.updateOne(
+            { _id: transaction._id },
+            {
+              $set: {
+                "metadata.webhookConfirmedAt": new Date(),
+                "metadata.webhookEvent": eventType,
+                ...(paymentId ? { razorpayPaymentId: paymentId } : {}),
+              },
             }
+          );
+
+          const webhookResult = await creditTransactionOnce(orderId, { paymentId, source: "webhook" });
+          if (webhookResult.credited) {
+            await reconcilePostCreditWalletState(transaction.userId);
+            console.log(
+              `Wallet credited via webhook for user ${transaction.userId}: $${webhookResult.amount}`
+            );
           }
           break;
         }
@@ -437,24 +403,22 @@ export const handleRazorpayWebhook = asyncHandler(
             break;
           }
 
-          const transaction = await Transaction.findOne({
-            razorpayOrderId: orderId,
-            status: "pending",
-          });
+          const updated = await Transaction.findOneAndUpdate(
+            { razorpayOrderId: orderId, status: "pending" },
+            {
+              $set: {
+                status: "failed",
+                "metadata.failedAt": new Date(),
+                "metadata.failureReason": errorDescription || "Payment failed",
+                "metadata.errorCode": errorCode,
+                "metadata.errorReason": errorReason,
+                "metadata.cancelledBy": "razorpay_webhook",
+                "metadata.webhookEvent": eventType,
+              },
+            }
+          );
 
-          if (transaction) {
-            transaction.status = "failed";
-            transaction.metadata = {
-              ...transaction.metadata,
-              failedAt: new Date(),
-              failureReason: errorDescription || "Payment failed",
-              errorCode,
-              errorReason,
-              cancelledBy: "razorpay_webhook",
-              webhookEvent: eventType,
-            };
-            await transaction.save();
-
+          if (updated) {
             console.log(`Payment marked as failed via webhook: ${orderId}`);
           }
           break;
@@ -519,36 +483,25 @@ export const syncTransactionStatus = asyncHandler(
     // Update based on Razorpay order status
     // Razorpay order statuses: created, attempted, paid
     if (order.status === "paid") {
-      // Order is paid but we haven't processed it yet
-      // This shouldn't happen normally, but handle it
-      transaction.status = "completed";
-      transaction.metadata = {
-        ...transaction.metadata,
-        syncedAt: new Date(),
-        razorpayStatus: order.status,
-      };
-      await transaction.save();
+      // Store sync audit metadata (non-gating)
+      await Transaction.updateOne(
+        { _id: transaction._id },
+        { $set: { "metadata.syncedAt": new Date(), "metadata.razorpayStatus": order.status } }
+      );
 
-      // Credit wallet
-      const user = await User.findById(userId);
-      if (user && !transaction.metadata?.walletCredited) {
-        user.walletBalance = (user.walletBalance || 0) + transaction.amount;
-        await user.save();
-        await reconcilePostCreditWalletState(user._id);
-
-        transaction.metadata = {
-          ...transaction.metadata,
-          walletCredited: true,
-          walletCreditedAt: new Date(),
-        };
-        await transaction.save();
-        captureLifecycleEvent(user, "wallet_topup_completed");
+      const syncResult = await creditTransactionOnce(orderId, { source: "sync" });
+      if (syncResult.credited) {
+        await reconcilePostCreditWalletState(userId);
       }
+
+      const newBalance = syncResult.credited
+        ? syncResult.newBalance
+        : (await User.findById(userId))?.walletBalance;
 
       res.json({
         status: "completed",
         message: "Transaction synced and completed",
-        newBalance: user?.walletBalance,
+        newBalance,
       });
     } else {
       // Order is still pending or attempted
@@ -591,49 +544,43 @@ export const cleanupStalePendingTransactions = async (): Promise<void> => {
           const order = await fetchOrder(txn.razorpayOrderId);
 
           if (order?.status === "paid") {
-            // Order was actually paid - complete the transaction
-            txn.status = "completed";
-            txn.metadata = {
-              ...txn.metadata,
-              recoveredAt: new Date(),
-              razorpayStatus: order.status,
-              recoveryNote: "Recovered during stale transaction cleanup",
-            };
-            await txn.save();
-
-            // Credit wallet
-            const user = await User.findById(txn.userId);
-            if (user && !txn.metadata?.walletCredited) {
-              user.walletBalance = (user.walletBalance || 0) + txn.amount;
-              await user.save();
-              await reconcilePostCreditWalletState(user._id);
-
-              txn.metadata = {
-                ...txn.metadata,
-                walletCredited: true,
-                walletCreditedAt: new Date(),
-              };
-              await txn.save();
-
+            const cleanupResult = await creditTransactionOnce(txn.razorpayOrderId!, { source: "backend-cleanup" });
+            if (cleanupResult.credited) {
+              await Transaction.updateOne(
+                { _id: txn._id },
+                {
+                  $set: {
+                    "metadata.recoveredAt": new Date(),
+                    "metadata.razorpayStatus": order.status,
+                    "metadata.recoveryNote": "Recovered during stale transaction cleanup",
+                  },
+                }
+              );
+              await reconcilePostCreditWalletState(cleanupResult.userId!);
               console.log(
-                `Recovered stale transaction ${txn._id} for user ${user._id}: $${txn.amount}`
+                `Recovered stale transaction ${txn._id} for user ${cleanupResult.userId}: $${cleanupResult.amount}`
               );
             }
             continue;
           }
         }
 
-        // Mark as failed/expired
-        txn.status = "failed";
-        txn.metadata = {
-          ...txn.metadata,
-          failedAt: new Date(),
-          failureReason: "Transaction expired (no payment received)",
-          cancelledBy: "system_cleanup",
-        };
-        await txn.save();
+        // Mark as failed/expired — atomic, gated on status:"pending" so it cannot clobber a credited txn
+        const markFailed = await Transaction.findOneAndUpdate(
+          { _id: txn._id, status: "pending" },
+          {
+            $set: {
+              status: "failed",
+              "metadata.failedAt": new Date(),
+              "metadata.failureReason": "Transaction expired (no payment received)",
+              "metadata.cancelledBy": "system_cleanup",
+            },
+          }
+        );
 
-        console.log(`Marked stale transaction ${txn._id} as failed`);
+        if (markFailed) {
+          console.log(`Marked stale transaction ${txn._id} as failed`);
+        }
       } catch (error) {
         console.error(`Error processing stale transaction ${txn._id}:`, error);
       }
