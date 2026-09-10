@@ -1,67 +1,12 @@
-import express from "express";
 import dotenv from "dotenv";
-import cors from "cors";
 
-import connectDB, { isDbConnected } from "./utils/connectDB";
-import { shutdownAnalytics } from "./services/analyticsService";
-import { errorHandler } from "./middleware/errorHandler";
-import userRoutes from "./routes/userRoutes";
-import jobRoutes from "./routes/jobRoutes";
-import matchRoutes from "./routes/matchRoutes";
-import walletRoutes from "./routes/walletRoutes";
-import chatRoutes from "./routes/chatRoutes";
-
-// Load environment variables
 dotenv.config();
 
-// Connect to database
+import connectDB from "./utils/connectDB";
+import { shutdownAnalytics } from "./services/analyticsService";
+import app from "./app";
+
 connectDB();
-
-const app = express();
-app.set("trust proxy", 1);
-
-// Middleware
-const allowedOrigin = process.env.FRONTEND_URL;
-if (process.env.NODE_ENV === "production" && !allowedOrigin) {
-  console.warn("WARNING: FRONTEND_URL is not set — CORS is open in production");
-}
-app.use(cors({
-  origin: process.env.NODE_ENV === "production"
-    ? allowedOrigin || true
-    : true,
-  credentials: true,
-}));
-
-// Configure express to handle larger payloads for file uploads
-app.use(
-  express.json({
-    limit: "10mb",
-    type: (req) => {
-      return req.headers["content-type"]?.startsWith("application/json");
-    },
-  })
-);
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Routes
-app.use("/api/users", userRoutes);
-app.use("/api/jobs", jobRoutes);
-app.use("/api/matches", matchRoutes);
-app.use("/api/wallet", walletRoutes);
-app.use("/api/chat", chatRoutes);
-
-// Basic health check route
-app.get("/healthcheck", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "backend",
-    db: isDbConnected() ? "connected" : "disconnected",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Error handler middleware
-app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 

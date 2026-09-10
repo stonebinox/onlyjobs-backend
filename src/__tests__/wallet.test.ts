@@ -23,7 +23,14 @@ const mockVerifyPayment = verifyPayment as jest.Mock;
 let testUserId: mongoose.Types.ObjectId;
 
 const testApp = express();
-testApp.use(express.json());
+testApp.use(express.json({
+  verify: (_req, _res, buf) => {
+    const req = _req as any;
+    if (typeof req.url === "string" && req.url.includes("/wallet/webhook")) {
+      req.rawBody = buf;
+    }
+  },
+}));
 testApp.use((req: any, _res: any, next: any) => {
   req.user = { _id: testUserId };
   next();

@@ -342,10 +342,12 @@ export const handleRazorpayWebhook = asyncHandler(
       throw new Error("Missing webhook signature");
     }
 
-    // Get raw body for signature verification
-    // Note: This requires raw body middleware to be set up
-    const rawBody =
-      typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    const rawBody = req.rawBody;
+    if (!rawBody) {
+      console.error("Webhook received without raw body — request may have been double-parsed");
+      res.status(400).json({ error: "Missing raw body" });
+      return;
+    }
 
     // Verify webhook signature
     const isValid = verifyWebhookSignature(rawBody, signature);
@@ -355,7 +357,7 @@ export const handleRazorpayWebhook = asyncHandler(
       throw new Error("Invalid webhook signature");
     }
 
-    const event = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const event = req.body;
     const eventType = event.event;
     const payload = event.payload;
 

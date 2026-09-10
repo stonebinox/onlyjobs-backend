@@ -99,12 +99,12 @@ export const verifyPayment = (
 
 /**
  * Verify Razorpay webhook signature
- * @param body Raw request body as string
+ * @param body Raw request body as Buffer or string
  * @param signature Webhook signature from header (x-razorpay-signature)
  * @returns true if signature is valid, false otherwise
  */
 export const verifyWebhookSignature = (
-  body: string,
+  body: Buffer | string,
   signature: string
 ): boolean => {
   try {
@@ -119,7 +119,14 @@ export const verifyWebhookSignature = (
       .update(body)
       .digest("hex");
 
-    return generatedSignature === signature;
+    const generatedBuf = Buffer.from(generatedSignature, "utf8");
+    const signatureBuf = Buffer.from(signature, "utf8");
+
+    if (generatedBuf.length !== signatureBuf.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(generatedBuf, signatureBuf);
   } catch (error) {
     console.error("Error verifying webhook signature:", error);
     return false;

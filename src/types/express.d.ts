@@ -8,6 +8,7 @@ declare global {
         [fieldname: string]: Multer.File[];
       };
       user?: IUser;
+      rawBody?: Buffer;
     }
   }
 }

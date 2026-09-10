@@ -96,7 +96,13 @@ const mockMatchUserToJob = matchUserToJob as jest.Mock;
 let currentUser: any = null; // overridden per test for auth injection
 
 const testApp = express();
-testApp.use(express.json());
+testApp.use(express.json({
+  verify: (req, _res, buf) => {
+    if (typeof req.url === "string" && req.url.includes("/wallet/webhook")) {
+      (req as any).rawBody = buf;
+    }
+  },
+}));
 testApp.use((req: any, _res: any, next: any) => {
   if (currentUser !== null) req.user = currentUser;
   next();

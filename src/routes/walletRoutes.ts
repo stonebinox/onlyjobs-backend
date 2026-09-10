@@ -15,12 +15,7 @@ import { protect } from "../middleware/authMiddleware";
 const router = express.Router();
 
 // Webhook route - NO auth, uses Razorpay signature verification
-// Must use raw body for signature verification
-router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  handleRazorpayWebhook
-);
+router.post("/webhook", handleRazorpayWebhook);
 
 // Protected routes
 router.get("/balance", protect, getWalletBalance);
