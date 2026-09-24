@@ -9,6 +9,13 @@ import Transaction from "../models/Transaction";
 import { matchUserToJob } from "../services/matchingService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
 import { captureLifecycleEvent } from "../services/analyticsService";
+import {
+  normalizeCompanyName,
+  buildCompanyHistoryMap,
+  applyCompanyHistoryNudge,
+  composeReasoningWithHistory,
+  CompanyOutcomeCounts,
+} from "../utils/companyHistory";
 
 // @desc    Get the count of available job listings
 // @route   GET /api/jobs/available-count
@@ -162,7 +169,46 @@ export const matchJobOnDemand = asyncHandler(async (req: Request, res: Response)
     throw new Error("Job not found or no longer available");
   }
 
-  const matchResult = await matchUserToJob(user, job);
+  // Load per-company outcome history for this job's company (fail-open: skip on error)
+  let companyHistory: CompanyOutcomeCounts | undefined;
+  try {
+    const outcomeMatches = await MatchRecord.find(
+      { userId: user._id, applicationOutcome: { $exists: true, $ne: null } },
+      { jobId: 1, applicationOutcome: 1, _id: 0 }
+    );
+    if (outcomeMatches.length > 0) {
+      const outcomeJobIds = outcomeMatches.map((m) => m.jobId);
+      const outcomeJobListings = await JobListing.find(
+        { _id: { $in: outcomeJobIds } },
+        { _id: 1, company: 1 }
+      );
+      const jobCompanyMap = new Map(
+        outcomeJobListings.map((j) => [
+          (j._id as mongoose.Types.ObjectId).toString(),
+          j.company,
+        ])
+      );
+      const records = outcomeMatches
+        .map((m) => ({
+          applicationOutcome: m.applicationOutcome,
+          company: jobCompanyMap.get(m.jobId.toString()) ?? '',
+        }))
+        .filter((r) => r.company);
+      const historyMap = buildCompanyHistoryMap(records);
+      companyHistory = historyMap.get(normalizeCompanyName(job.company));
+    }
+  } catch (err) {
+    console.error('[HISTORY] Failed to load company history for on-demand match:', err);
+  }
+
+  const baseMatchResult = await matchUserToJob(user, job, undefined, companyHistory);
+  const minScore = user.preferences?.minScore ?? 30;
+  const nudged = applyCompanyHistoryNudge(baseMatchResult.matchScore, minScore, companyHistory);
+  const matchResult = {
+    ...baseMatchResult,
+    matchScore: nudged.adjustedScore,
+    reasoning: composeReasoningWithHistory(baseMatchResult.reasoning, nudged.reasoningLine),
+  };
 
   // 1. Deduct wallet atomically
   const updated = await User.findOneAndUpdate(

@@ -6,6 +6,7 @@ import JobListing, { IJobListing } from "../models/JobListing";
 import MatchRecord, { Freshness } from "../models/MatchRecord";
 import { jobMatcherPrompt } from "../utils/jobMatcherPrompt";
 import { getUserQnA } from "./userService";
+import { CompanyOutcomeCounts } from "../utils/companyHistory";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -39,7 +40,8 @@ export type UserQnAData = Awaited<ReturnType<typeof getUserQnA>>;
 export const matchUserToJob = async (
   user: IUser,
   job: IJobListing,
-  preloadedQnA?: UserQnAData
+  preloadedQnA?: UserQnAData,
+  companyHistory?: CompanyOutcomeCounts
 ): Promise<MatchResult> => {
   // Use pre-loaded QnA if provided, otherwise fetch it
   const answeredQuestions = preloadedQnA ?? (await getUserQnA(user));
@@ -55,6 +57,8 @@ export const matchUserToJob = async (
     // Include learned preferences if available (from previous job rejections)
     learnedPreferences: user.learnedPreferences?.insights || null,
     currentLocation: user.currentLocation || null,
+    // Inject company history into prompt context on a hit; omit field on a miss
+    ...(companyHistory !== undefined ? { companyHistory } : {}),
   };
 
   const jobInfo = {
