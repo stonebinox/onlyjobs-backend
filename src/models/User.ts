@@ -7,6 +7,18 @@ export interface LearnedPreferences {
   feedbackCount: number; // how many "No" reasons contributed
 }
 
+export interface IAttribution {
+  source?: "utm" | "referral" | "direct" | "unknown";
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  referringDomain?: string;
+  landingPath?: string;
+  firstSeenAt?: Date;
+}
+
 export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
   id: string;
@@ -62,6 +74,7 @@ export interface IUser extends Document {
   noResumeReminderCount: number;
   lastNoResumeReminderAt?: Date;
   matchingDisabledReason?: "auto_low_balance" | "user";
+  attribution?: IAttribution;
   guideProgress?: Map<
     string,
     {
@@ -139,6 +152,24 @@ const UserSchema: Schema = new Schema(
     noResumeReminderCount: { type: Number, default: 0 },
     lastNoResumeReminderAt: { type: Date },
     matchingDisabledReason: { type: String, enum: ["auto_low_balance", "user"] },
+    // onlyjobs-akb: this attribution subdocument MUST stay byte-identical to the
+    // copy in onlyjobs-background/src/models/User.ts. Both models write the same
+    // shared MongoDB collection; Mongoose strict mode SILENTLY STRIPS unknown
+    // fields on save, so any divergence wipes attribution. Keep them in sync.
+    attribution: {
+      type: {
+        source: { type: String, enum: ["utm", "referral", "direct", "unknown"] },
+        utmSource: String,
+        utmMedium: String,
+        utmCampaign: String,
+        utmContent: String,
+        utmTerm: String,
+        referringDomain: String,
+        landingPath: String,
+        firstSeenAt: Date,
+      },
+      default: undefined,
+    },
     guideProgress: {
       type: Map,
       of: {

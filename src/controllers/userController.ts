@@ -39,6 +39,103 @@ import {
 
 const saltRounds = 10;
 
+// eslint-disable-next-line no-control-regex -- intentional: strip ASCII control chars (0x00-0x1F, 0x7F) from user-supplied attribution strings
+const CONTROL_CHARS = new RegExp("[\\u0000-\\u001F\\u007F]", "g");
+
+type AttributionSource = "utm" | "referral" | "direct" | "unknown";
+interface AttributionDoc {
+  source: AttributionSource;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  referringDomain?: string;
+  landingPath?: string;
+  firstSeenAt?: Date;
+}
+
+export function sanitizeAttribution(raw: unknown): AttributionDoc | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+
+  const r = raw as Record<string, unknown>;
+
+  // Reconstruct field-by-field — never spread raw; never access dangerous keys
+  const result: Partial<AttributionDoc> & Pick<AttributionDoc, "source"> = {
+    source: "direct",
+  };
+
+  const utmFields: Array<[keyof AttributionDoc, string]> = [
+    ["utmSource", "utmSource"],
+    ["utmMedium", "utmMedium"],
+    ["utmCampaign", "utmCampaign"],
+    ["utmContent", "utmContent"],
+    ["utmTerm", "utmTerm"],
+  ];
+  for (const [prop, key] of utmFields) {
+    const v = r[key];
+    if (typeof v === "string") {
+      (result as Record<string, unknown>)[prop] = String(v)
+        .replace(CONTROL_CHARS, "")
+        .slice(0, 200);
+    }
+  }
+
+  const rd = r["referringDomain"];
+  if (typeof rd === "string" && rd) {
+    try {
+      const url = rd.includes("://") ? new URL(rd) : new URL("https://" + rd);
+      result.referringDomain = url.hostname.slice(0, 255);
+    } catch {
+      // invalid — omit
+    }
+  }
+
+  const lp = r["landingPath"];
+  if (typeof lp === "string" && lp.startsWith("/")) {
+    result.landingPath = String(lp)
+      .replace(CONTROL_CHARS, "")
+      .split("?")[0]
+      .split("#")[0]
+      .slice(0, 500);
+  }
+
+  const fsa = r["firstSeenAt"];
+  if (fsa !== undefined && fsa !== null) {
+    const d = new Date(fsa as string);
+    if (!isNaN(d.getTime())) {
+      const now = Date.now();
+      const oneYear = 365 * 24 * 60 * 60 * 1000;
+      const fiveMin = 5 * 60 * 1000;
+      if (d.getTime() >= now - oneYear && d.getTime() <= now + fiveMin) {
+        result.firstSeenAt = d;
+      }
+    }
+  }
+
+  // Derive source server-side (do not trust client)
+  const hasUtm = !!(
+    result.utmSource ??
+    result.utmMedium ??
+    result.utmCampaign ??
+    result.utmContent ??
+    result.utmTerm
+  );
+  if (hasUtm) {
+    result.source = "utm";
+  } else if (result.referringDomain) {
+    result.source = "referral";
+  } else {
+    result.source = "direct";
+  }
+
+  // Return undefined if nothing valid was extracted beyond source
+  const hasData = Object.keys(result).some((k) => k !== "source");
+  if (!hasData) return undefined;
+
+  return result as AttributionDoc;
+}
+
 const validateStringArray = (fieldName: string, value: unknown) => {
   if (!Array.isArray(value)) {
     throw new Error(`${fieldName} must be an array of strings`);
@@ -84,12 +181,20 @@ export const authenticateUser = asyncHandler(
 
       // we create the user with $2 welcome bonus
       const WELCOME_BONUS = 2;
-      
+
       // Generate verification token for new users
       const verificationToken = crypto.randomBytes(32).toString("hex");
       const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-      
-      user = await User.create({
+
+      // Sanitize attribution — fail-open: user is created even if this throws
+      let sanitizedAttribution: AttributionDoc | undefined;
+      try {
+        sanitizedAttribution = sanitizeAttribution(req.body.attribution);
+      } catch {
+        // omit attribution on any error
+      }
+
+      const createPayload: Record<string, unknown> = {
         email,
         password: encryptedPassword,
         lastLoginAt: new Date(),
@@ -97,7 +202,12 @@ export const authenticateUser = asyncHandler(
         emailVerificationToken: verificationToken,
         emailVerificationExpires: verificationExpires,
         isVerified: false,
-      });
+      };
+      if (sanitizedAttribution !== undefined) {
+        createPayload.attribution = sanitizedAttribution;
+      }
+
+      user = await User.create(createPayload);
 
       // Create a transaction record for the welcome bonus
       await Transaction.create({
