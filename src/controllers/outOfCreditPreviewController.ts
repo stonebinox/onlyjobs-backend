@@ -6,6 +6,7 @@ import MatchRecord from "../models/MatchRecord";
 import User from "../models/User";
 import { applyPreferenceFilters } from "../utils/preferenceFilters";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
+import { capNewJobsByCompany, COMPANY_CAP_K } from "../utils/capNewJobsByCompany";
 
 const DAILY_MATCH_COST = 0.3;
 const ON_DEMAND_MATCH_COST = 0.05;
@@ -90,8 +91,17 @@ export const getOutOfCreditPreview = expressAsyncHandler(
         !skippedJobIds.has((job._id as mongoose.Types.ObjectId).toString())
     );
 
-    const count = eligible.length;
-    const candidates = eligible.slice(0, 5).map((job) => ({
+    // Apply the same per-company cap as the nightly matcher so preview count matches reality
+    let cappedEligible: typeof eligible;
+    try {
+      cappedEligible = capNewJobsByCompany(eligible, COMPANY_CAP_K);
+    } catch (err: any) {
+      console.warn(`[CAP-FAILOPEN] out-of-credit preview: capNewJobsByCompany threw; proceeding with uncapped candidates: ${err?.message ?? String(err)}`);
+      cappedEligible = eligible; // fail-open: show uncapped rather than hide the corpus
+    }
+
+    const count = cappedEligible.length;
+    const candidates = cappedEligible.slice(0, 5).map((job) => ({
       title: job.title,
       company: job.company,
       location: job.location,
