@@ -7,6 +7,7 @@ import User from "../models/User";
 import { applyPreferenceFilters } from "../utils/preferenceFilters";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
 import { capNewJobsByCompany, COMPANY_CAP_K } from "../utils/capNewJobsByCompany";
+import { RETIRED_SOURCES } from "../constants/retiredSources";
 
 const DAILY_MATCH_COST = 0.3;
 const ON_DEMAND_MATCH_COST = 0.05;
@@ -68,6 +69,7 @@ export const getOutOfCreditPreview = expressAsyncHandler(
 
     const recentJobs = await JobListing.find({
       postedDate: { $gte: fifteenDaysAgo },
+      source: { $nin: RETIRED_SOURCES },
     });
 
     const prefFiltered = applyPreferenceFilters(

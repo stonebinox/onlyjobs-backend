@@ -124,6 +124,54 @@ describe('getMatchesData', () => {
     const results = await getMatchesData(userId.toString());
     expect(results).toHaveLength(0);
   });
+
+  it('hydrates a Himalayas-source match with postedDate older than 15 days (display path is source-agnostic)', async () => {
+    // Oracle (xkjp acceptance item D): retiring Himalayas must NOT hide EXISTING historical
+    // Himalayas matches the user already holds. The corpus-scan exclusion only affects
+    // the nightly-matcher corpus (scrape/match pipeline). The display path (getMatchesData /
+    // GET /api/matches) is source-agnostic: it returns any MatchRecord whose jobId resolves
+    // to a JobListing, regardless of source or postedDate.
+    //
+    // Wrong impl (corpus exclusion applied to display): returns [] → FAILS.
+    // Wrong impl (postedDate age-gate on display): returns [] → FAILS (20-day-old job).
+    const userId = new mongoose.Types.ObjectId();
+
+    // Old Himalayas job — postedDate more than 15 days ago (outside the corpus window).
+    // This simulates a historical match created before retirement.
+    const oldHimalayasJob = await JobListing.create({
+      title: 'Old Himalayas Engineer',
+      company: 'HimCo Historical',
+      location: ['Remote'],
+      source: 'Himalayas',
+      description: 'Build production software at scale',
+      url: `https://himalayas.app/old-job-display-${Date.now()}`,
+      postedDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000), // 20 days ago
+      scrapedDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+    });
+
+    // MatchRecord the nightly matcher created before retirement — must stay visible.
+    await MatchRecord.create({
+      userId,
+      jobId: oldHimalayasJob._id,
+      matchScore: 72,
+      verdict: 'Good match',
+      reasoning: 'Strong skills overlap',
+      freshness: Freshness.STALE,
+      clicked: false,
+      skipped: false,
+      applied: null,
+    });
+
+    const results = await getMatchesData(userId.toString());
+
+    // The Himalayas-linked match IS returned — display path does not filter by source or age.
+    expect(results).toHaveLength(1);
+    expect(results[0].matchScore).toBe(72);
+    // job must be hydrated (not null) — the display path must populate the JobListing.
+    expect(results[0].job).not.toBeNull();
+    expect((results[0].job as any).source).toBe('Himalayas');
+    expect((results[0].job as any).title).toBe('Old Himalayas Engineer');
+  });
 });
 
 // ---------------------------------------------------------------------------

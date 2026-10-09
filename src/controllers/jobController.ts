@@ -16,6 +16,7 @@ import {
   composeReasoningWithHistory,
   CompanyOutcomeCounts,
 } from "../utils/companyHistory";
+import { RETIRED_SOURCES } from "../constants/retiredSources";
 
 // @desc    Get the count of available job listings
 // @route   GET /api/jobs/available-count
@@ -28,6 +29,7 @@ export const getAvailableJobCount = asyncHandler(
 
     const jobCount = await JobListing.countDocuments({
       postedDate: { $gte: fifteenDaysAgo },
+      source: { $nin: RETIRED_SOURCES },
     });
 
     res.json({ count: jobCount });
@@ -43,7 +45,7 @@ export const getPublicStats = asyncHandler(
     fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
     const [jobCount, userCount] = await Promise.all([
-      JobListing.countDocuments({ postedDate: { $gte: fifteenDaysAgo } }),
+      JobListing.countDocuments({ postedDate: { $gte: fifteenDaysAgo }, source: { $nin: RETIRED_SOURCES } }),
       User.countDocuments({ isVerified: true }),
     ]);
 
@@ -78,6 +80,7 @@ export const getAllJobs = asyncHandler(async (req: Request, res: Response) => {
     description: { $exists: true, $nin: ["", "-- No description available --"] },
   };
   if (source) filter.source = source;
+  filter.$and = [...(filter.$and || []), { source: { $nin: RETIRED_SOURCES } }];
 
   const [jobs, total, sources] = await Promise.all([
     JobListing.find(filter)
@@ -89,6 +92,7 @@ export const getAllJobs = asyncHandler(async (req: Request, res: Response) => {
     JobListing.distinct("source", {
       postedDate: { $gte: fifteenDaysAgo },
       description: { $exists: true, $nin: ["", "-- No description available --"] },
+      $and: [{ source: { $nin: RETIRED_SOURCES } }],
     }),
   ]);
 
