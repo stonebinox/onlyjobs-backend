@@ -121,13 +121,25 @@ export const parseSignalDecision = (raw: unknown): SignalDecision => {
 const isListingSpecific = (category: string): boolean =>
   LISTING_SPECIFIC_CATEGORIES.includes(category);
 
+// A rejection not yet in the database (backfill dry run), counted alongside persisted rows
+export interface PendingRejection {
+  userId: mongoose.Types.ObjectId;
+  companyKey: string;
+  category: string;
+  createdAt: Date;
+  analysisStatus: RejectionSignalAnalysisStatus;
+  scope: RejectionSignalScope;
+}
+
 // Repeated rejections of the same company are a company signal regardless of the model's scope choice
-const applyRepeatRejectionOverride = async (
+export const applyRepeatRejectionOverride = async (
   userId: mongoose.Types.ObjectId,
   matchId: mongoose.Types.ObjectId,
   key: string,
   category: string,
-  decision: SignalDecision
+  decision: SignalDecision,
+  now: Date = new Date(),
+  pending: PendingRejection[] = []
 ): Promise<SignalDecision> => {
   if (
     !key ||
@@ -146,9 +158,21 @@ const applyRepeatRejectionOverride = async (
     // the window is an LLM-independent repeat signal regardless of cooldown. Only rows the AI
     // positively judged listing-specific (ok + scope none) are excluded.
     $nor: [{ analysisStatus: "ok", scope: "none" }],
-    createdAt: { $gte: new Date(Date.now() - OVERRIDE_WINDOW_DAYS * DAY_MS) },
+    createdAt: {
+      $gte: new Date(now.getTime() - OVERRIDE_WINDOW_DAYS * DAY_MS),
+      $lte: now,
+    },
   });
-  if (others < OVERRIDE_MIN_OTHER_SIGNALS) return decision;
+  const pendingOthers = pending.filter(
+    (p) =>
+      p.userId.equals(userId) &&
+      p.companyKey === key &&
+      !isListingSpecific(p.category) &&
+      !(p.analysisStatus === "ok" && p.scope === "none") &&
+      p.createdAt.getTime() >= now.getTime() - OVERRIDE_WINDOW_DAYS * DAY_MS &&
+      p.createdAt.getTime() <= now.getTime()
+  ).length;
+  if (others + pendingOthers < OVERRIDE_MIN_OTHER_SIGNALS) return decision;
 
   const forced: SignalDecision = { ...decision, scope: "company", attribute: undefined };
   if (decision.duration === "none") {
@@ -158,14 +182,28 @@ const applyRepeatRejectionOverride = async (
   return forced;
 };
 
+export const computeBlockedUntil = (
+  decision: SignalDecision,
+  now: Date = new Date()
+): Date | null =>
+  decision.duration === "temporary"
+    ? new Date(
+        now.getTime() + (decision.cooldownDays ?? DEFAULT_COOLDOWN_DAYS) * DAY_MS
+      )
+    : null;
+
+// `now` is the rejection time (backfill passes the original one): it anchors blockedUntil, the
+// repeat-rejection window and createdAt. Live callers omit it.
 export const persistRejectionSignal = async (params: {
   match: IMatchRecord;
   job: IJobListing;
   source: RejectionSignalSource;
   reason: RejectionReason;
   decision: SignalDecision;
+  now?: Date;
 }): Promise<IRejectionSignal> => {
   const { match, job, source, reason } = params;
+  const now = params.now ?? new Date();
   const matchId = match._id as mongoose.Types.ObjectId;
 
   const existing = await RejectionSignal.findOne({ matchId, source });
@@ -178,7 +216,8 @@ export const persistRejectionSignal = async (params: {
     matchId,
     key,
     reason.category,
-    params.decision
+    params.decision,
+    now
   );
 
   const temporary = decision.duration === "temporary";
@@ -197,16 +236,13 @@ export const persistRejectionSignal = async (params: {
     attribute: decision.attribute,
     duration: decision.duration,
     cooldownDays: temporary ? decision.cooldownDays : undefined,
-    blockedUntil: temporary
-      ? new Date(
-          Date.now() + (decision.cooldownDays ?? DEFAULT_COOLDOWN_DAYS) * DAY_MS
-        )
-      : null,
+    blockedUntil: computeBlockedUntil(decision, now),
     rationale: decision.rationale,
     status: "active" as const,
     revokedAt: null,
     analysisStatus: decision.analysisStatus,
     analysisVersion: 1,
+    ...(params.now ? { createdAt: params.now } : {}),
   };
 
   if (existing) {

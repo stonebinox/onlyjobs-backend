@@ -74,20 +74,19 @@ Respond with a JSON object:
 }`;
 };
 
-export const analyzeRejectionAndUpdatePreferences = async (
+interface RejectionModelOutput {
+  parsed: { updatedInsights?: unknown; signal?: unknown };
+  existingInsights: string;
+  existingFeedbackCount: number;
+}
+
+// Shared LLM call + parse. Throws on API/JSON errors; callers own the catch. Does not write the User.
+const requestRejectionAnalysis = async (
   user: IUser,
   job: IJobListing,
   matchRecord: IMatchRecord,
   reason: RejectionReason
-): Promise<AnalysisResult | null> => {
-  // Skip learning for non-learning categories
-  if (NON_LEARNING_CATEGORIES.includes(reason.category)) {
-    console.log(
-      `Skipping preference learning for category: ${reason.category}`
-    );
-    return null;
-  }
-
+): Promise<RejectionModelOutput | null> => {
   const existingInsights = user.learnedPreferences?.insights || "None yet.";
   const existingFeedbackCount = user.learnedPreferences?.feedbackCount || 0;
 
@@ -123,14 +122,13 @@ export const analyzeRejectionAndUpdatePreferences = async (
     details: reason.details || "No additional details provided",
   };
 
-  try {
-    const response = await getOpenAI().chat.completions.create({
-      model: process.env.GPT_MODEL || "gpt-4o-mini",
-      messages: [
-        { role: "system", content: buildPreferenceLearningPrompt() },
-        {
-          role: "user",
-          content: `User Profile:
+  const response = await getOpenAI().chat.completions.create({
+    model: process.env.GPT_MODEL || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: buildPreferenceLearningPrompt() },
+      {
+        role: "user",
+        content: `User Profile:
 ${JSON.stringify(userContext, null, 2)}
 
 Job That Was Rejected:
@@ -143,23 +141,48 @@ User's Reason for Not Applying:
 ${JSON.stringify(rejectionContext, null, 2)}
 
 Analyze this rejection and provide updated preference insights.`,
-        },
-      ],
-    });
+      },
+    ],
+  });
 
-    const output = response.choices[0]?.message?.content;
-    if (!output) {
-      console.error("No response from OpenAI for preference learning");
-      return null;
-    }
+  const output = response.choices[0]?.message?.content;
+  if (!output) {
+    console.error("No response from OpenAI for preference learning");
+    return null;
+  }
 
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("No JSON found in OpenAI preference learning output");
-      return null;
-    }
+  const jsonMatch = output.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.error("No JSON found in OpenAI preference learning output");
+    return null;
+  }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+  return {
+    parsed: JSON.parse(jsonMatch[0]),
+    existingInsights,
+    existingFeedbackCount,
+  };
+};
+
+export const analyzeRejectionAndUpdatePreferences = async (
+  user: IUser,
+  job: IJobListing,
+  matchRecord: IMatchRecord,
+  reason: RejectionReason
+): Promise<AnalysisResult | null> => {
+  // Skip learning for non-learning categories
+  if (NON_LEARNING_CATEGORIES.includes(reason.category)) {
+    console.log(
+      `Skipping preference learning for category: ${reason.category}`
+    );
+    return null;
+  }
+
+  try {
+    const output = await requestRejectionAnalysis(user, job, matchRecord, reason);
+    if (!output) return null;
+    const { parsed, existingInsights, existingFeedbackCount } = output;
+
     const insights =
       typeof parsed.updatedInsights === "string"
         ? parsed.updatedInsights
@@ -191,6 +214,23 @@ Analyze this rejection and provide updated preference insights.`,
     };
   } catch (error) {
     console.error("Error in preference learning analysis:", error);
+    return null;
+  }
+};
+
+// Same prompt and signal parsing as the live path, but never writes the User (no insights
+// rewrite, no feedbackCount bump). Used by the one-off backfill. Null means the LLM call failed.
+export const extractRejectionSignal = async (
+  user: IUser,
+  job: IJobListing,
+  matchRecord: IMatchRecord,
+  reason: RejectionReason
+): Promise<SignalDecision | null> => {
+  try {
+    const output = await requestRejectionAnalysis(user, job, matchRecord, reason);
+    return output ? parseSignalDecision(output.parsed.signal) : null;
+  } catch (error) {
+    console.error("Error extracting rejection signal:", error);
     return null;
   }
 };
