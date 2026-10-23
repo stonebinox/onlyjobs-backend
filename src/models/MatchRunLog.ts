@@ -21,6 +21,7 @@ export interface IMatchRunLog extends Document {
     salarySkipped: number;
     locationSkipped: number;
     relevanceSkipped: number;
+    rejectionBlocked: number;
   };
   jobsEvaluated: number;
   matchesCreated: number;
@@ -47,6 +48,7 @@ const MatchRunLogSchema: Schema = new Schema(
       salarySkipped: { type: Number, default: 0 },
       locationSkipped: { type: Number, default: 0 },
       relevanceSkipped: { type: Number, default: 0 },
+      rejectionBlocked: { type: Number, default: 0 },
     },
     jobsEvaluated: { type: Number, default: 0 },
     matchesCreated: { type: Number, default: 0 },

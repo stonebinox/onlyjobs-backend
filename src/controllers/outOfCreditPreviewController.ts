@@ -7,6 +7,11 @@ import User from "../models/User";
 import { applyPreferenceFilters } from "../utils/preferenceFilters";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
 import { capNewJobsByCompany, COMPANY_CAP_K } from "../utils/capNewJobsByCompany";
+import {
+  findBlockForJob,
+  getActiveRejectionBlocks,
+  isRejectionBlockingEnabled,
+} from "../services/rejectionSignalService";
 import { RETIRED_SOURCES } from "../constants/retiredSources";
 
 const DAILY_MATCH_COST = 0.3;
@@ -87,11 +92,21 @@ export const getOutOfCreditPreview = expressAsyncHandler(
       (user.skippedJobs || []).map((id) => (id as mongoose.Types.ObjectId).toString())
     );
 
-    const eligible = prefFiltered.kept.filter(
+    let eligible = prefFiltered.kept.filter(
       (job) =>
         !existingMatchIds.has((job._id as mongoose.Types.ObjectId).toString()) &&
         !skippedJobIds.has((job._id as mongoose.Types.ObjectId).toString())
     );
+
+    // Hide companies the user told us to hide, as the nightly matcher does (fail-open on error)
+    if (isRejectionBlockingEnabled()) {
+      try {
+        const { companyBlocks } = await getActiveRejectionBlocks(user._id);
+        eligible = eligible.filter((job) => !findBlockForJob(companyBlocks, job));
+      } catch (err: any) {
+        console.warn(`[REJECTION-FAILOPEN] out-of-credit preview: could not load rejection blocks: ${err?.message ?? String(err)}`);
+      }
+    }
 
     // Apply the same per-company cap as the nightly matcher so preview count matches reality
     let cappedEligible: typeof eligible;

@@ -10,12 +10,19 @@ import { matchUserToJob } from "../services/matchingService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
 import { captureLifecycleEvent } from "../services/analyticsService";
 import {
-  normalizeCompanyName,
+  companyKey,
   buildCompanyHistoryMap,
   applyCompanyHistoryNudge,
-  composeReasoningWithHistory,
+  composeReasoningWithNotes,
   CompanyOutcomeCounts,
 } from "../utils/companyHistory";
+import {
+  ActiveRejectionBlocks,
+  applyRejectionEnforcement,
+  buildMatcherSignals,
+  getActiveRejectionBlocks,
+  isRejectionBlockingEnabled,
+} from "../services/rejectionSignalService";
 import { RETIRED_SOURCES } from "../constants/retiredSources";
 
 // @desc    Get the count of available job listings
@@ -199,19 +206,49 @@ export const matchJobOnDemand = asyncHandler(async (req: Request, res: Response)
         }))
         .filter((r) => r.company);
       const historyMap = buildCompanyHistoryMap(records);
-      companyHistory = historyMap.get(normalizeCompanyName(job.company));
+      companyHistory = historyMap.get(companyKey(job.company));
     }
   } catch (err) {
     console.error('[HISTORY] Failed to load company history for on-demand match:', err);
   }
 
-  const baseMatchResult = await matchUserToJob(user, job, undefined, companyHistory);
+  // Load the user's active rejection blocks (fail-open: skip on error)
+  let rejectionBlocks: ActiveRejectionBlocks | undefined;
+  if (isRejectionBlockingEnabled()) {
+    try {
+      rejectionBlocks = await getActiveRejectionBlocks(user._id);
+    } catch (err) {
+      console.error('[REJECTION] Failed to load rejection blocks for on-demand match:', err);
+    }
+  }
+
+  const baseMatchResult = await matchUserToJob(
+    user,
+    job,
+    undefined,
+    companyHistory,
+    rejectionBlocks ? buildMatcherSignals(rejectionBlocks.contextSignals) : undefined
+  );
   const minScore = user.preferences?.minScore ?? 30;
   const nudged = applyCompanyHistoryNudge(baseMatchResult.matchScore, minScore, companyHistory);
+  const enforcement = rejectionBlocks
+    ? applyRejectionEnforcement({
+        matchScore: nudged.adjustedScore,
+        verdict: baseMatchResult.verdict,
+        minScore,
+        job,
+        blocks: rejectionBlocks,
+        violatedSignalIds: baseMatchResult.violatedSignalIds,
+      })
+    : { matchScore: nudged.adjustedScore, verdict: baseMatchResult.verdict, note: null };
   const matchResult = {
     ...baseMatchResult,
-    matchScore: nudged.adjustedScore,
-    reasoning: composeReasoningWithHistory(baseMatchResult.reasoning, nudged.reasoningLine),
+    matchScore: enforcement.matchScore,
+    verdict: enforcement.verdict,
+    reasoning: composeReasoningWithNotes(
+      baseMatchResult.reasoning,
+      [nudged.reasoningLine, enforcement.note].filter((n): n is string => !!n)
+    ),
   };
 
   // 1. Deduct wallet atomically

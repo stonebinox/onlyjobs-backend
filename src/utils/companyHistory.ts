@@ -44,6 +44,27 @@ export function normalizeCompanyName(name: string): string {
   return n.replace(/\s+/g, ' ').trim();
 }
 
+// Shared key for company-history lookups and rejection signals: "Duck Duck Go" === "DuckDuckGo".
+export function companyKey(name: string): string {
+  return normalizeCompanyName(name).replace(/\s+/g, '');
+}
+
+const SENIORITY_TOKENS = new Set([
+  'senior', 'sr', 'staff', 'principal', 'lead', 'junior', 'jr', 'i', 'ii', 'iii', 'iv',
+]);
+
+export function roleKey(title: string): string {
+  if (!title) return '';
+  return title
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((t) => t && !SENIORITY_TOKENS.has(t))
+    .join(' ');
+}
+
 export function buildCompanyHistoryMap(
   records: Array<{ applicationOutcome?: string | null; company: string }>
 ): CompanyHistoryMap {
@@ -53,7 +74,7 @@ export function buildCompanyHistoryMap(
     if (!outcome || !VALID_OUTCOMES.has(outcome)) continue;
     const company = record.company;
     if (!company) continue;
-    const key = normalizeCompanyName(company);
+    const key = companyKey(company);
     if (!key) continue;
     if (!map.has(key)) {
       map.set(key, { heard_back: 0, no_response: 0, rejected: 0, interview: 0, offer: 0 });
@@ -137,4 +158,14 @@ export function composeReasoningWithHistory(modelReasoning: string, historyLine:
   const sentences = trimmed.split(/(?<=[.!?])\s+/);
   const kept = sentences.slice(0, 2).join(' ').trimEnd();
   return `${kept} ${historyLine.trim()}`;
+}
+
+// Appends deterministic notes after the model's reasoning while keeping the total at 3 sentences max.
+export function composeReasoningWithNotes(modelReasoning: string, notes: string[]): string {
+  const trimmed = modelReasoning.trim();
+  const cleanNotes = notes.map((n) => n.trim()).filter(Boolean);
+  if (cleanNotes.length === 0) return trimmed;
+  const sentences = trimmed.split(/(?<=[.!?])\s+/);
+  const kept = sentences.slice(0, Math.max(0, 3 - cleanNotes.length)).join(' ').trimEnd();
+  return [kept, ...cleanNotes].filter(Boolean).join(' ');
 }

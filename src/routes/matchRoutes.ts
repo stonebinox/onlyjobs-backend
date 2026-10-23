@@ -11,6 +11,7 @@ import {
   markMatchClick,
   markMatchApplied,
   recordApplicationOutcome,
+  revokeBlock,
   triggerMatchForMe,
   unskipMatch,
 } from "../controllers/matchController";
@@ -28,6 +29,7 @@ router.post("/applied", protect, markMatchApplied);
 router.get("/skipped", protect, getSkipped);
 router.get("/visited", protect, getVisited);
 router.post("/unskip", protect, unskipMatch);
+router.post("/revoke-block", protect, revokeBlock);
 router.post("/trigger-for-me", protect, triggerMatchForMe);
 router.post("/:id/outcome", protect, recordApplicationOutcome);
 

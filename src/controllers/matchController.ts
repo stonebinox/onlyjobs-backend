@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import expressAsyncHandler from "express-async-handler";
 import mongoose from "mongoose";
 
-import MatchRecord from "../models/MatchRecord";
+import MatchRecord, { IMatchRecord, RejectionReason } from "../models/MatchRecord";
+import RejectionSignal, { RejectionSignalSource } from "../models/RejectionSignal";
 import User from "../models/User";
 import JobListing from "../models/JobListing";
 import {
@@ -12,7 +13,153 @@ import {
   markMatchAppliedStatus,
 } from "../services/matchingService";
 import { analyzeRejectionAndUpdatePreferences } from "../services/preferenceLearningService";
+import {
+  FAILED_DECISION,
+  SKIPPED_DECISION,
+  SignalSummary,
+  persistRejectionSignal,
+  revokeSignalsForMatch,
+  toSignalSummary,
+} from "../services/rejectionSignalService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
+
+const NON_LEARNING_CATEGORY = "job_inactive";
+
+// Runs preference learning plus rejection-signal capture for a reasoned rejection.
+// Never throws: a failure here must not fail the user's skip / "No" request.
+const learnFromRejection = async (
+  match: IMatchRecord,
+  source: RejectionSignalSource,
+  reasonObj: RejectionReason
+): Promise<SignalSummary | null> => {
+  let decision =
+    reasonObj.category === NON_LEARNING_CATEGORY ? SKIPPED_DECISION : FAILED_DECISION;
+  let job = null;
+
+  try {
+    const user = await User.findById(match.userId);
+    job = await JobListing.findById(match.jobId);
+
+    if (user && job) {
+      const result = await analyzeRejectionAndUpdatePreferences(
+        user,
+        job,
+        match,
+        reasonObj
+      );
+
+      if (result) {
+        decision = result.signal;
+        // Update the match record to mark when it was analyzed
+        const field = source === "skip" ? "skipReason" : "notAppliedReason";
+        match[field] = { ...match[field]!, analyzedAt: new Date() };
+        await match.save();
+      }
+    }
+  } catch (error) {
+    // Log but don't fail the request if learning fails
+    console.error(`Error during preference learning (${source}):`, error);
+  }
+
+  if (!job) return persistDeletedListingSignal(match, source, reasonObj);
+  try {
+    const signal = await persistRejectionSignal({
+      match,
+      job,
+      source,
+      reason: reasonObj,
+      decision,
+    });
+
+    // The LLM call is slow, so an undo can land at any point up to here. Undo handlers write the
+    // match state first and revoke second: either this re-read sees the undo, or their revoke
+    // runs after our write and sees the signal.
+    if (isUndone(await MatchRecord.findById(match._id), source)) {
+      await revokeSignalsForMatch(match.userId, match._id as mongoose.Types.ObjectId);
+      return null;
+    }
+    return toSignalSummary(signal);
+  } catch (error) {
+    console.error(`Error persisting rejection signal (${source}):`, error);
+    return null;
+  }
+};
+
+// The listing was deleted: nothing to analyze or block, but keep one audit row per (match, source).
+const persistDeletedListingSignal = async (
+  match: IMatchRecord,
+  source: RejectionSignalSource,
+  reasonObj: RejectionReason
+): Promise<null> => {
+  const fields = {
+    userId: match.userId,
+    matchId: match._id,
+    jobId: match.jobId,
+    source,
+    category: reasonObj.category,
+    details: reasonObj.details,
+    company: "",
+    companyKey: "",
+    title: "",
+    roleKey: "",
+    scope: "none" as const,
+    duration: "none" as const,
+    status: "active" as const,
+    revokedAt: null,
+    analysisStatus: "skipped" as const,
+    analysisVersion: 1,
+  };
+  try {
+    await RejectionSignal.create(fields);
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      // A row for this (match, source) exists. Reactivate it only if revoked (skip -> unskip ->
+      // re-skip); the status filter leaves an already-active row untouched, as persistRejectionSignal does.
+      try {
+        await RejectionSignal.updateOne(
+          { matchId: match._id, source, status: "revoked" },
+          { $set: fields, $unset: { attribute: "", cooldownDays: "", blockedUntil: "", rationale: "" } }
+        );
+      } catch (updateError) {
+        console.error(`Error reactivating rejection signal (${source}):`, updateError);
+      }
+    } else {
+      console.error(`Error persisting rejection signal (${source}):`, error);
+    }
+  }
+  try {
+    // Same undo race as the main path: an undo that landed before the row existed revoked nothing
+    if (isUndone(await MatchRecord.findById(match._id), source)) {
+      await revokeSignalsForMatch(match.userId, match._id as mongoose.Types.ObjectId);
+    }
+  } catch (error) {
+    console.error(`Error revoking deleted-listing signal (${source}):`, error);
+  }
+  return null;
+};
+
+const isUndone = (
+  current: IMatchRecord | null,
+  source: RejectionSignalSource
+): boolean =>
+  !current ||
+  (source === "skip" ? current.skipped !== true : current.applied !== false);
+
+// Failing to revoke must not look like success: the user would believe a company is un-hidden
+// while it stays blocked. Retrying is safe, every caller revokes any still-active signal.
+const revokeOrFail = async (
+  res: Response,
+  userId: mongoose.Types.ObjectId | string,
+  matchId: mongoose.Types.ObjectId | string
+): Promise<number> => {
+  try {
+    return await revokeSignalsForMatch(userId, matchId);
+  } catch (error) {
+    console.error("Error revoking rejection signals:", error);
+    res.status(500);
+    throw new Error("Couldn't update your hidden companies. Please try again.");
+  }
+};
 
 // @desc    Get user's job matches
 // @route   GET /api/matches/
@@ -115,36 +262,9 @@ export const markMatchAsSkipped = expressAsyncHandler(
     const match = (await skipMatch(matchId, userId, reasonObj))!;
 
     // If a reason was provided, trigger preference learning
-    if (reasonObj) {
-      try {
-        const user = await User.findById(match.userId);
-        const job = await JobListing.findById(match.jobId);
+    const signal = reasonObj ? await learnFromRejection(match, "skip", reasonObj) : null;
 
-        if (user && job) {
-          // Run preference learning (real-time)
-          const result = await analyzeRejectionAndUpdatePreferences(
-            user,
-            job,
-            match,
-            reasonObj
-          );
-
-          // Update the match record to mark when it was analyzed
-          if (result) {
-            match.skipReason = {
-              ...match.skipReason!,
-              analyzedAt: new Date(),
-            };
-            await match.save();
-          }
-        }
-      } catch (error) {
-        // Log but don't fail the request if learning fails
-        console.error("Error during preference learning (skip):", error);
-      }
-    }
-
-    res.json({ message: "Match marked as skipped" });
+    res.json({ message: "Match marked as skipped", signal });
   }
 );
 
@@ -185,36 +305,15 @@ export const markMatchApplied = expressAsyncHandler(
     const match = (await markMatchAppliedStatus(matchId, userId, applied, reasonObj))!;
 
     // If user said "No" with a reason, trigger preference learning
-    if (!applied && reasonObj) {
-      try {
-        const user = await User.findById(match.userId);
-        const job = await JobListing.findById(match.jobId);
+    const signal =
+      !applied && reasonObj
+        ? await learnFromRejection(match, "not_applied", reasonObj)
+        : null;
 
-        if (user && job) {
-          // Run preference learning (real-time as per plan)
-          const result = await analyzeRejectionAndUpdatePreferences(
-            user,
-            job,
-            match,
-            reasonObj
-          );
+    // Applying after all means the earlier "No" no longer stands
+    if (applied) await revokeOrFail(res, userId, match._id as mongoose.Types.ObjectId);
 
-          // Update the match record to mark when it was analyzed
-          if (result) {
-            match.notAppliedReason = {
-              ...match.notAppliedReason!,
-              analyzedAt: new Date(),
-            };
-            await match.save();
-          }
-        }
-      } catch (error) {
-        // Log but don't fail the request if learning fails
-        console.error("Error during preference learning:", error);
-      }
-    }
-
-    res.json({ message: "Match applied status updated" });
+    res.json({ message: "Match applied status updated", signal });
   }
 );
 
@@ -313,6 +412,7 @@ export const unskipMatch = expressAsyncHandler(
 
     // Idempotence: already unskipped — return success without mutation
     if (match.skipped !== true) {
+      await revokeOrFail(res, userId, match._id as mongoose.Types.ObjectId);
       res.json({ message: "Match already unskipped" });
       return;
     }
@@ -327,8 +427,44 @@ export const unskipMatch = expressAsyncHandler(
     match.skipped = false;
     match.skipReason = undefined;
     await match.save();
+    await revokeOrFail(res, userId, match._id as mongoose.Types.ObjectId);
 
     res.json({ message: "Match unskipped" });
+  }
+);
+
+// @desc    Stop hiding a company after a skip / "No", leaving the answer itself intact
+// @route   POST /api/matches/revoke-block
+// @access  Private
+export const revokeBlock = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const { matchId } = req.body;
+    const userId = req.user!._id;
+
+    if (!matchId) {
+      res.status(400);
+      throw new Error("Match ID is required");
+    }
+
+    if (typeof matchId !== "string" || !mongoose.isValidObjectId(matchId)) {
+      res.status(400);
+      throw new Error("Invalid match ID");
+    }
+
+    const match = await MatchRecord.findById(matchId);
+    if (!match) {
+      res.status(404);
+      throw new Error("Match not found");
+    }
+
+    if (match.userId.toString() !== userId.toString()) {
+      res.status(403);
+      throw new Error("Not authorized to update this match");
+    }
+
+    const revoked = await revokeOrFail(res, userId, match._id as mongoose.Types.ObjectId);
+
+    res.json({ message: "Block revoked", revoked });
   }
 );
 

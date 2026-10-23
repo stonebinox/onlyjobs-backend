@@ -309,4 +309,37 @@ describe('matchUserToJob', () => {
     expect(result.verdict).toBe('Strong match');
     expect(result.reasoning).toBe(expectedReasoning);
   });
+
+  it('parses violatedSignalIds placed before reasoning (prompt field order) and keeps only provided ids', async () => {
+    (MockOpenAI as any).__mockCreate.mockResolvedValueOnce({
+      choices: [{
+        message: {
+          content:
+            '{"matchScore": 60, "verdict": "Mild match", "violatedSignalIds": ["sig2", "unknown"], "reasoning": "Decent fit for your stack."}',
+        },
+      }],
+    });
+
+    const user = {
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Test User',
+      resume: 'Engineer',
+      preferences: {},
+      learnedPreferences: null,
+    } as any;
+
+    const job = await JobListing.create({
+      title: 'Engineer',
+      company: 'Test Co',
+      location: ['Remote'],
+      source: 'test',
+      description: 'A job',
+      url: 'https://example.com/job-order',
+      scrapedDate: new Date(),
+    });
+
+    const result = await matchUserToJob(user, job, undefined, undefined, [{ id: 'sig1' }, { id: 'sig2' }] as any);
+    expect(result.violatedSignalIds).toEqual(['sig2']);
+    expect(result.reasoning).toBe('Decent fit for your stack.');
+  });
 });

@@ -7,6 +7,7 @@ import MatchRecord, { Freshness } from "../models/MatchRecord";
 import { jobMatcherPrompt } from "../utils/jobMatcherPrompt";
 import { getUserQnA } from "./userService";
 import { CompanyOutcomeCounts } from "../utils/companyHistory";
+import type { MatcherRejectionSignal } from "./rejectionSignalService";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -19,6 +20,7 @@ interface MatchResult {
   verdict: string;
   reasoning: string;
   freshness: Freshness;
+  violatedSignalIds?: string[];
 }
 
 export const calculateJobFreshness = (job: IJobListing): Freshness => {
@@ -41,7 +43,8 @@ export const matchUserToJob = async (
   user: IUser,
   job: IJobListing,
   preloadedQnA?: UserQnAData,
-  companyHistory?: CompanyOutcomeCounts
+  companyHistory?: CompanyOutcomeCounts,
+  rejectionSignals?: MatcherRejectionSignal[]
 ): Promise<MatchResult> => {
   // Use pre-loaded QnA if provided, otherwise fetch it
   const answeredQuestions = preloadedQnA ?? (await getUserQnA(user));
@@ -59,6 +62,8 @@ export const matchUserToJob = async (
     currentLocation: user.currentLocation || null,
     // Inject company history into prompt context on a hit; omit field on a miss
     ...(companyHistory !== undefined ? { companyHistory } : {}),
+    // NOTE: onlyjobs-background has a mirrored copy of this block; keep them identical.
+    ...(rejectionSignals && rejectionSignals.length > 0 ? { rejectionSignals } : {}),
   };
 
   const jobInfo = {
@@ -96,12 +101,22 @@ Evaluate this match.`,
 
   const parsed = JSON.parse(match[0]);
 
-  return {
+  const result: MatchResult = {
     matchScore: parsed.matchScore,
     verdict: parsed.verdict,
     reasoning: parsed.reasoning,
     freshness: calculateJobFreshness(job),
   };
+
+  if (rejectionSignals && rejectionSignals.length > 0) {
+    const provided = new Set(rejectionSignals.map((s) => s.id));
+    const raw: unknown = parsed.violatedSignalIds;
+    result.violatedSignalIds = Array.isArray(raw)
+      ? [...new Set(raw.filter((id): id is string => typeof id === "string" && provided.has(id)))]
+      : [];
+  }
+
+  return result;
 };
 
 export const getMatchesData = async (

@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import User, { IUser } from "../models/User";
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord, RejectionReason } from "../models/MatchRecord";
+import { SignalDecision, parseSignalDecision } from "./rejectionSignalService";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -16,6 +17,7 @@ const NON_LEARNING_CATEGORIES = ["job_inactive"];
 interface AnalysisResult {
   insights: string;
   feedbackCount: number;
+  signal: SignalDecision;
 }
 
 const buildPreferenceLearningPrompt = (): string => {
@@ -47,9 +49,28 @@ The updated insights string must be:
 Example insights format:
 "Cannot work US-only remote roles (based in Uruguay). Minimum salary expectation around $150k. Avoids early-stage startups under 50 employees. Prefers SRE roles over generic DevOps titles."
 
+Also decide whether this rejection should hide future jobs, and for how long. Return a "signal" object:
+- "scope": one of
+  - "company": the user does not want jobs from this company for now. Use this for dislike of the company's application process or talent pools, application caps ("applied too many times", "can't apply again for 30 days"), "already rejected me" / "already applied at this company", or "too large a company".
+  - "company_role": the user dislikes this kind of role specifically at this company (other roles there are fine).
+  - "role": the user dislikes this type of role anywhere.
+  - "attribute": a general rule about companies or jobs (e.g. "company headquartered in India", "requires on-site work").
+  - "none": a fact about this one listing only (e.g. US-only, the salary on this listing, a duplicate of a job already applied to) that says nothing about the company or role type.
+- "attribute": required when scope is "attribute" - a short phrase describing the rule. Omit otherwise.
+- "duration": "none" when scope is "none", otherwise "temporary" or "permanent". Judge this from the user's own words: "never work with Indian companies" is permanent; "tedious process" is temporary; an application cap of N days is temporary for that many days.
+- "cooldownDays": for temporary only, how many days to hide it (7 to 180). Use 30 if the user gave no hint.
+- "rationale": one short sentence explaining your decision.
+
 Respond with a JSON object:
 {
-  "updatedInsights": "string with the updated preference insights"
+  "updatedInsights": "string with the updated preference insights",
+  "signal": {
+    "scope": "none | company | company_role | role | attribute",
+    "attribute": "string, only for scope attribute",
+    "duration": "none | temporary | permanent",
+    "cooldownDays": 30,
+    "rationale": "string"
+  }
 }`;
 };
 
@@ -139,24 +160,34 @@ Analyze this rejection and provide updated preference insights.`,
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const newFeedbackCount = existingFeedbackCount + 1;
+    const insights =
+      typeof parsed.updatedInsights === "string"
+        ? parsed.updatedInsights
+        : existingInsights;
 
-    // Update user's learned preferences
-    await User.findByIdAndUpdate(user._id, {
-      learnedPreferences: {
-        insights: parsed.updatedInsights,
-        lastUpdated: new Date(),
-        feedbackCount: newFeedbackCount,
+    // Atomic counter; insights stay last-writer-wins
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        $set: {
+          "learnedPreferences.insights": insights,
+          "learnedPreferences.lastUpdated": new Date(),
+        },
+        $inc: { "learnedPreferences.feedbackCount": 1 },
       },
-    });
+      { new: true }
+    );
+    const newFeedbackCount =
+      updatedUser?.learnedPreferences?.feedbackCount ?? existingFeedbackCount + 1;
 
     console.log(
       `Updated learned preferences for user ${user.email}. Feedback count: ${newFeedbackCount}`
     );
 
     return {
-      insights: parsed.updatedInsights,
+      insights,
       feedbackCount: newFeedbackCount,
+      signal: parseSignalDecision(parsed.signal),
     };
   } catch (error) {
     console.error("Error in preference learning analysis:", error);

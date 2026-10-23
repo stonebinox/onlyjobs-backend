@@ -24,6 +24,7 @@ import {
 import { generateToken } from "../utils/generateToken";
 import { AnsweredQuestion } from "../types/AnsweredQuestion";
 import { deleteAllMatches } from "../services/matchingService";
+import { deleteSignalsForUser } from "../services/rejectionSignalService";
 import MatchRecord from "../models/MatchRecord";
 import JobListing, { IJobListing } from "../models/JobListing";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
@@ -1380,6 +1381,7 @@ export const factoryResetUserAccount = asyncHandler(
     user.qna = [];
     await user.save();
     await deleteAllMatches(userId);
+    await deleteSignalsForUser(userId);
     // todo: we should reset any usage metrics in the future if any
 
     res.status(200).json({
@@ -1402,6 +1404,7 @@ export const deleteUserAccount = asyncHandler(
     }
 
     await deleteAllMatches(userId);
+    await deleteSignalsForUser(userId);
     await User.findByIdAndDelete(userId);
 
     res.status(200).json({
