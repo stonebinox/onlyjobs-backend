@@ -6,6 +6,7 @@ import {
   getMatches,
   getSkipped,
   getTracker,
+  getVisited,
   markMatchAsSkipped,
   markMatchClick,
   markMatchApplied,
@@ -25,6 +26,7 @@ router.post("/click", protect, markMatchClick);
 router.post("/skip", protect, markMatchAsSkipped);
 router.post("/applied", protect, markMatchApplied);
 router.get("/skipped", protect, getSkipped);
+router.get("/visited", protect, getVisited);
 router.post("/unskip", protect, unskipMatch);
 router.post("/trigger-for-me", protect, triggerMatchForMe);
 router.post("/:id/outcome", protect, recordApplicationOutcome);

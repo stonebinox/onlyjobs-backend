@@ -364,6 +364,36 @@ export const getSkipped = expressAsyncHandler(
   }
 );
 
+// @desc    Get matches the user opened but has not applied to or skipped
+// @route   GET /api/matches/visited
+// @access  Private
+export const getVisited = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+
+    const matches = await MatchRecord.find({
+      userId,
+      skipped: { $ne: true },
+      applied: { $ne: true },
+      $or: [{ clicked: true }, { applied: false }],
+    }).sort({ updatedAt: -1 });
+
+    const jobIds = matches.map((m) => m.jobId);
+    const jobs = await JobListing.find({ _id: { $in: jobIds } });
+    const jobMap = new Map(
+      jobs.map((j) => [(j._id as mongoose.Types.ObjectId).toString(), j])
+    );
+
+    // Keep records even when the job listing is missing — render fallback client-side
+    const result = matches.map((match) => {
+      const job = jobMap.get(match.jobId.toString()) ?? null;
+      return { ...match.toObject(), job };
+    });
+
+    res.json(result);
+  }
+);
+
 // @desc    Trigger on-demand job matching for the authenticated user
 // @route   POST /api/matches/trigger-for-me
 // @access  Private
