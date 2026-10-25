@@ -7,7 +7,14 @@ jest.mock('openai', () => {
   return { __esModule: true, default: MockConstructor };
 });
 
+jest.mock('../middleware/authMiddleware', () => ({
+  protect: (_req: any, _res: any, next: any) => next(),
+}));
+
 import OpenAI from 'openai';
+import request from 'supertest';
+import express from 'express';
+import matchRoutes from '../routes/matchRoutes';
 import mongoose from 'mongoose';
 import MatchRecord, { Freshness } from '../models/MatchRecord';
 import JobListing from '../models/JobListing';
@@ -60,7 +67,7 @@ async function mkJob(company: string, title = 'Backend Engineer') {
   });
 }
 
-// Creates a match then forces updatedAt (the rejection time) bypassing mongoose timestamps
+// Creates a match then forces updatedAt (the rejection time, createdAt a day earlier) bypassing mongoose timestamps
 async function mkMatch(
   userId: mongoose.Types.ObjectId,
   jobId: mongoose.Types.ObjectId,
@@ -79,7 +86,7 @@ async function mkMatch(
     applied: null,
     ...fields,
   });
-  await MatchRecord.collection.updateOne({ _id: m._id as mongoose.Types.ObjectId },{ $set: { updatedAt: daysAgo(rejectedDaysAgo) } });
+  await MatchRecord.collection.updateOne({ _id: m._id as mongoose.Types.ObjectId },{ $set: { updatedAt: daysAgo(rejectedDaysAgo), createdAt: daysAgo(rejectedDaysAgo + 1) } });
   return m;
 }
 
@@ -282,5 +289,61 @@ describe('modes', () => {
     mockCreate.mockResolvedValue(reply(TEMP30));
     await runBackfill(quiet({ apply: true, yes: true }));
     expect(await RejectionSignal.countDocuments()).toBe(1);
+  });
+});
+
+describe('system-written and reserved rows', () => {
+  it('excludes relevance rows, even with a real verdict', async () => {
+    const user = await mkUser();
+    const [a, b] = await Promise.all(['A', 'B'].map((n) => mkJob(n)));
+    await mkMatch(user._id as mongoose.Types.ObjectId, a._id as mongoose.Types.ObjectId, { ...skipFields('relevance', 'x'), verdict: 'Weak match' }, 5);
+    await mkMatch(user._id as mongoose.Types.ObjectId, b._id as mongoose.Types.ObjectId, { applied: false, notAppliedReason: { category: 'relevance', details: 'x' } }, 5);
+
+    const res = await runBackfill(quiet({ apply: true, yes: true }));
+
+    expect(res.rows).toBe(0);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(await RejectionSignal.countDocuments()).toBe(0);
+  });
+
+  it('excludes system limit-skip rows by details text', async () => {
+    const user = await mkUser();
+    const job = await mkJob('Limit Inc');
+    await mkMatch(user._id as mongoose.Types.ObjectId, job._id as mongoose.Types.ObjectId, skipFields('other', 'Match limit reached (200 matches per run)'), 5);
+
+    const res = await runBackfill(quiet({ apply: true, yes: true }));
+
+    expect(res.rows).toBe(0);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /skip with a reserved reason', () => {
+  const app = express();
+  let userId: mongoose.Types.ObjectId;
+  app.use(express.json());
+  app.use((req: any, _res: any, next: any) => {
+    req.user = { _id: userId };
+    next();
+  });
+  app.use('/api/matches', matchRoutes);
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(res.statusCode !== 200 ? res.statusCode : 500).json({ error: err.message });
+  });
+
+  it('returns 400 for "relevance" and leaves the match untouched', async () => {
+    const user = await mkUser();
+    userId = user._id as mongoose.Types.ObjectId;
+    const job = await mkJob('Reserved Inc');
+    const m = await mkMatch(userId, job._id as mongoose.Types.ObjectId, {}, 5);
+    const before = JSON.stringify(await MatchRecord.collection.findOne({ _id: m._id as mongoose.Types.ObjectId }));
+
+    const res = await request(app).post('/api/matches/skip').send({ matchId: String(m._id), reason: ' relevance ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("This reason can't be used.");
+    expect(JSON.stringify(await MatchRecord.collection.findOne({ _id: m._id as mongoose.Types.ObjectId }))).toBe(before);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(await RejectionSignal.countDocuments()).toBe(0);
   });
 });

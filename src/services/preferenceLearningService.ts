@@ -12,7 +12,7 @@ function getOpenAI(): OpenAI {
 }
 
 // Reason categories that should NOT be used for learning
-const NON_LEARNING_CATEGORIES = ["job_inactive"];
+export const NON_LEARNING_CATEGORIES = ["job_inactive", "relevance"];
 
 interface AnalysisResult {
   insights: string;
@@ -226,6 +226,8 @@ export const extractRejectionSignal = async (
   matchRecord: IMatchRecord,
   reason: RejectionReason
 ): Promise<SignalDecision | null> => {
+  if (NON_LEARNING_CATEGORIES.includes(reason.category)) return null;
+
   try {
     const output = await requestRejectionAnalysis(user, job, matchRecord, reason);
     return output ? parseSignalDecision(output.parsed.signal) : null;

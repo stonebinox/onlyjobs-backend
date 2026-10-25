@@ -106,9 +106,12 @@ async function mkMatch(user: any, job: any, o: MatchOpts = {}) {
   if (o.skipCategory) doc.skipReason = { category: o.skipCategory, details: `${marker} skip` };
   if (o.naCategory) doc.notAppliedReason = { category: o.naCategory, details: `${marker} na` };
   const m = await MatchRecord.create(doc);
-  if (o.at) {
-    await MatchRecord.collection.updateOne({ _id: m._id as any },{ $set: { updatedAt: o.at } });
-  }
+  // createdAt a day before the rejection time so the row reads as a user rejection, not a system write
+  const rejectedAt = o.at ?? new Date();
+  await MatchRecord.collection.updateOne(
+    { _id: m._id as any },
+    { $set: { updatedAt: rejectedAt, createdAt: new Date(rejectedAt.getTime() - 24 * 60 * 60 * 1000) } }
+  );
   return { id: m._id as mongoose.Types.ObjectId, marker };
 }
 

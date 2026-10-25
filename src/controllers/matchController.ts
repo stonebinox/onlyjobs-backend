@@ -12,7 +12,10 @@ import {
   skipMatch,
   markMatchAppliedStatus,
 } from "../services/matchingService";
-import { analyzeRejectionAndUpdatePreferences } from "../services/preferenceLearningService";
+import {
+  NON_LEARNING_CATEGORIES,
+  analyzeRejectionAndUpdatePreferences,
+} from "../services/preferenceLearningService";
 import {
   FAILED_DECISION,
   SKIPPED_DECISION,
@@ -23,7 +26,11 @@ import {
 } from "../services/rejectionSignalService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
 
-const NON_LEARNING_CATEGORY = "job_inactive";
+// Categories the system writes itself; a user may not submit them as a rejection reason
+const RESERVED_REASON_CATEGORIES = ["relevance"];
+
+const isReservedReason = (reason: unknown): boolean =>
+  RESERVED_REASON_CATEGORIES.includes(String(reason).trim());
 
 // Runs preference learning plus rejection-signal capture for a reasoned rejection.
 // Never throws: a failure here must not fail the user's skip / "No" request.
@@ -33,7 +40,7 @@ const learnFromRejection = async (
   reasonObj: RejectionReason
 ): Promise<SignalSummary | null> => {
   let decision =
-    reasonObj.category === NON_LEARNING_CATEGORY ? SKIPPED_DECISION : FAILED_DECISION;
+    NON_LEARNING_CATEGORIES.includes(reasonObj.category) ? SKIPPED_DECISION : FAILED_DECISION;
   let job = null;
 
   try {
@@ -244,6 +251,11 @@ export const markMatchAsSkipped = expressAsyncHandler(
       throw new Error("Match ID is required");
     }
 
+    if (reason && isReservedReason(reason)) {
+      res.status(400);
+      throw new Error("This reason can't be used.");
+    }
+
     // Build reason object if provided
     const reasonObj = reason ? { category: reason, details } : undefined;
 
@@ -284,6 +296,11 @@ export const markMatchApplied = expressAsyncHandler(
     if (typeof applied !== "boolean") {
       res.status(400);
       throw new Error("Applied status must be a boolean");
+    }
+
+    if (!applied && reason && isReservedReason(reason)) {
+      res.status(400);
+      throw new Error("This reason can't be used.");
     }
 
     // Build reason object if provided

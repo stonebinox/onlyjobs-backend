@@ -4,7 +4,10 @@ import MatchRecord, { IMatchRecord, RejectionReason } from "../models/MatchRecor
 import JobListing, { IJobListing } from "../models/JobListing";
 import RejectionSignal, { RejectionSignalSource } from "../models/RejectionSignal";
 import User, { IUser } from "../models/User";
-import { extractRejectionSignal } from "../services/preferenceLearningService";
+import {
+  NON_LEARNING_CATEGORIES,
+  extractRejectionSignal,
+} from "../services/preferenceLearningService";
 import {
   PendingRejection,
   SKIPPED_DECISION,
@@ -15,8 +18,18 @@ import {
 } from "../services/rejectionSignalService";
 import { companyKey } from "../utils/companyHistory";
 
-// Excluded from the backfill entirely: no row written, not counted as a candidate
-const NON_LEARNING_CATEGORY = "job_inactive";
+// System-written limit skips carry no user rejection; matched on details text
+const SYSTEM_LIMIT_DETAILS = /^(Match|Evaluation) limit reached/;
+// Rows the system touched at creation have updatedAt ~ createdAt; a real rejection comes later
+const MIN_REJECTION_GAP_MS = 1000;
+const rejectedAfterCreation = {
+  $expr: {
+    $or: [
+      { $not: [{ $gt: ["$createdAt", null] }] },
+      { $gte: ["$updatedAt", { $add: ["$createdAt", MIN_REJECTION_GAP_MS] }] },
+    ],
+  },
+};
 // Rough gpt-4o-mini cost of one extraction call (~1.5k tokens in, ~300 out)
 const EST_COST_PER_CALL_USD = 0.0005;
 const MAX_DETAILS_PRINTED = 60;
@@ -56,13 +69,20 @@ const collectCandidates = async (
     MatchRecord.find({
       ...scope,
       skipped: true,
-      "skipReason.category": { $exists: true, $nin: [null, "", NON_LEARNING_CATEGORY] },
+      "skipReason.category": { $exists: true, $nin: [null, "", ...NON_LEARNING_CATEGORIES] },
+      "skipReason.details": { $not: SYSTEM_LIMIT_DETAILS },
       verdict: { $ne: "skipped" },
+      ...rejectedAfterCreation,
     }),
     MatchRecord.find({
       ...scope,
       applied: false,
-      "notAppliedReason.category": { $exists: true, $nin: [null, "", NON_LEARNING_CATEGORY] },
+      "notAppliedReason.category": {
+        $exists: true,
+        $nin: [null, "", ...NON_LEARNING_CATEGORIES],
+      },
+      "notAppliedReason.details": { $not: SYSTEM_LIMIT_DETAILS },
+      ...rejectedAfterCreation,
     }),
   ]);
 
