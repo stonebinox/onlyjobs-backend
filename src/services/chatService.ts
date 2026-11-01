@@ -629,6 +629,7 @@ async function executeToolCall(
       reasonCode: log.reasonCode,
       reasonSummary: log.reasonSummary,
       matchesCreated: log.matchesCreated,
+      relevanceDeferredCount: log.relevanceDeferredCount,
       preFilterResults: log.preFilterResults,
     }));
   }

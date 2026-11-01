@@ -19,6 +19,7 @@ import express from 'express';
 import ChatConversation from '../models/ChatConversation';
 import ChatMemory from '../models/ChatMemory';
 import User from '../models/User';
+import MatchRunLog, { MatchRunOutcome } from '../models/MatchRunLog';
 import { processMessage, checkRateLimit } from '../services/chatService';
 import chatRoutes from '../routes/chatRoutes';
 
@@ -875,5 +876,54 @@ describe('chatService get_user_profile_summary', () => {
     expect(contentStr).not.toContain('passwordResetToken');
     expect(contentStr).not.toContain('emailVerificationToken');
     expect(contentStr).not.toContain('password');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chat Service — get_match_run_logs surfaces relevanceDeferredCount (onlyjobs-lhmw)
+// ---------------------------------------------------------------------------
+
+describe('chatService get_match_run_logs', () => {
+  it('surfaces the persisted relevanceDeferredCount in each returned log', async () => {
+    testUserId = new mongoose.Types.ObjectId();
+    await MatchRunLog.create({
+      userId: testUserId,
+      runAt: new Date(),
+      outcome: MatchRunOutcome.MATCHED,
+      matchesCreated: 3,
+      relevanceDeferredCount: 17,
+      reasonCode: 'matched',
+      reasonSummary: 'Matched jobs',
+    });
+
+    mockCreate
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            role: 'assistant' as const,
+            content: null,
+            tool_calls: [{
+              id: 'tc_runlogs',
+              type: 'function' as const,
+              function: { name: 'get_match_run_logs', arguments: '{}' },
+            }],
+          },
+          finish_reason: 'tool_calls' as const,
+        }],
+      })
+      .mockResolvedValueOnce(defaultMockResponse);
+
+    await processMessage(testUserId.toString(), 'Why did my last run find few jobs?');
+
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    const secondCallMessages = mockCreate.mock.calls[1][0].messages as any[];
+    const toolMsg = secondCallMessages.find((m: any) => m.role === 'tool');
+    expect(toolMsg).toBeDefined();
+
+    const logs = JSON.parse(toolMsg.content);
+    expect(Array.isArray(logs)).toBe(true);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].relevanceDeferredCount).toBe(17);
+    expect(logs[0].matchesCreated).toBe(3);
   });
 });

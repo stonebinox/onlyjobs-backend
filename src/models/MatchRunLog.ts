@@ -27,6 +27,7 @@ export interface IMatchRunLog extends Document {
   matchesCreated: number;
   autoSkipped: number;
   cappedCount: number;
+  relevanceDeferredCount: number;
   reasonCode: string;
   reasonSummary: string;
   createdAt: Date;
@@ -54,6 +55,7 @@ const MatchRunLogSchema: Schema = new Schema(
     matchesCreated: { type: Number, default: 0 },
     autoSkipped: { type: Number, default: 0 },
     cappedCount: { type: Number, default: 0 },
+    relevanceDeferredCount: { type: Number, default: 0 },
     reasonCode: { type: String, required: true },
     reasonSummary: { type: String, required: true },
   },
