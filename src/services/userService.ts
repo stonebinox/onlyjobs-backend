@@ -14,11 +14,20 @@ import { Question } from "../types/Question";
 import { getAnswerComposerInstructions } from "../utils/getAnswerComposerInstructions";
 import { IJobListing } from "../models/JobListing";
 import { IMatchRecord } from "../models/MatchRecord";
+import { hasMeaningfulResume } from "../utils/resumePredicate";
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   return _openai;
+}
+
+let _cvOpenai: OpenAI | null = null;
+function getCvOpenAI(): OpenAI {
+  if (!_cvOpenai) {
+    _cvOpenai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
+  }
+  return _cvOpenai;
 }
 
 export const findUserByEmail = async (email: string) => {
@@ -37,55 +46,126 @@ export const getUserNameById = async (id: string) => {
 
 const MAX_TOKENS = 80000;
 
-export const parseUserCV = async (uploadedFilePath: string) => {
+export const MIN_RESUME_TEXT_CHARS = 200;
 
+export type CvParseErrorCode = "unreadable" | "invalid_output" | "transient" | "unsupported_type";
+
+export class CvParseError extends Error {
+  constructor(public code: CvParseErrorCode) {
+    super(`CV parse failed: ${code}`);
+    this.name = "CvParseError";
+  }
+}
+
+const CV_RETRY_BACKOFF_MS = 500;
+
+const sniffFileKind = (data: Buffer): "pdf" | "docx" | null => {
+  if (data.subarray(0, 4).toString("latin1") === "%PDF") return "pdf";
+  if (data.length >= 2 && data[0] === 0x50 && data[1] === 0x4b) return "docx";
+  return null;
+};
+
+const extractCvText = async (filePath: string): Promise<string> => {
   try {
-    const ext = path.extname(uploadedFilePath).toLowerCase();
-    let rawText = "";
-
-    if (ext === ".pdf") {
-      const fileData = fs.readFileSync(uploadedFilePath);
+    const fileData = fs.readFileSync(filePath);
+    const kind = sniffFileKind(fileData);
+    if (kind === null) throw new CvParseError("unsupported_type");
+    if (kind === "pdf") {
       const parsed = await pdfParse(fileData);
-      rawText = parsed.text;
-    } else if (ext === ".docx") {
-      const result = await mammoth.extractRawText({ path: uploadedFilePath });
-      rawText = result.value;
-    } else {
-      throw new Error(
-        "Unsupported file type. Only PDF and DOCX are supported."
-      );
+      return parsed.text ?? "";
     }
+    if (kind === "docx") {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value ?? "";
+    }
+    return "";
+  } catch (e) {
+    if (e instanceof CvParseError) throw e;
+    console.error("Error extracting CV text:", e);
+    throw new CvParseError("unreadable");
+  }
+};
 
-    const truncatedText =
-      rawText.length > MAX_TOKENS
-        ? rawText.slice(0, MAX_TOKENS) + "\n\n[TRUNCATED]"
-        : rawText;
+type OpenAIErrorLike = { status?: unknown; name?: unknown; code?: unknown };
 
-    const response = await getOpenAI().chat.completions.create({
+const isTransientOpenAIError = (e: unknown): boolean => {
+  const err = (e ?? {}) as OpenAIErrorLike;
+  if (typeof err.status === "number") {
+    return err.status === 429 || err.status >= 500;
+  }
+  const name = typeof err.name === "string" ? err.name : "";
+  const code = typeof err.code === "string" ? err.code : "";
+  return (
+    name.includes("APIConnection") ||
+    /timeout/i.test(name) ||
+    ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"].includes(code)
+  );
+};
+
+const callCvParserModel = async (text: string) => {
+  const attempt = () =>
+    getCvOpenAI().chat.completions.create({
       model: process.env.GPT_MODEL || "gpt-4o-mini",
       messages: [
         { role: "system", content: cvParserInstructions },
         {
           role: "user",
-          content: `Here's my resume:\n\n${truncatedText}\n\nPlease parse it into the expected JSON structure.`,
+          content: `Here's my resume:\n\n${text}\n\nPlease parse it into the expected JSON structure.`,
         },
       ],
     });
 
-    const rawOutput = response.choices?.[0]?.message?.content;
-
-    if (!rawOutput) throw new Error("Empty response from OpenAI");
-
-    const match = rawOutput.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON found in output");
-
-    const parsed = JSON.parse(match[0]);
-
-    return parsed;
-  } catch (e) {
-    console.error("Error parsing CV:", e);
-    return null;
+  try {
+    return await attempt();
+  } catch (first) {
+    if (!isTransientOpenAIError(first)) throw first;
+    console.error("Transient OpenAI error parsing CV, retrying once:", first);
+    await new Promise((resolve) => setTimeout(resolve, CV_RETRY_BACKOFF_MS));
+    try {
+      return await attempt();
+    } catch (second) {
+      if (!isTransientOpenAIError(second)) throw second;
+      console.error("OpenAI error persisted after retry:", second);
+      throw new CvParseError("transient");
+    }
   }
+};
+
+export const parseUserCV = async (uploadedFilePath: string) => {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const rawText = await extractCvText(uploadedFilePath);
+  if (rawText.trim().length < MIN_RESUME_TEXT_CHARS) {
+    throw new CvParseError("unreadable");
+  }
+
+  const truncatedText =
+    rawText.length > MAX_TOKENS
+      ? rawText.slice(0, MAX_TOKENS) + "\n\n[TRUNCATED]"
+      : rawText;
+
+  const response = await callCvParserModel(truncatedText);
+
+  const rawOutput = response.choices?.[0]?.message?.content;
+  if (!rawOutput) throw new CvParseError("invalid_output");
+
+  const match = rawOutput.match(/\{[\s\S]*\}/);
+  if (!match) throw new CvParseError("invalid_output");
+
+  let parsed;
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    throw new CvParseError("invalid_output");
+  }
+
+  if (!parsed || typeof parsed !== "object" || !hasMeaningfulResume(parsed.resume)) {
+    throw new CvParseError("invalid_output");
+  }
+
+  return parsed;
 };
 
 export const getAIQuestion = async (user: IUser) => {

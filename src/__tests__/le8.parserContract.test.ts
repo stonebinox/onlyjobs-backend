@@ -7,7 +7,7 @@
 
 jest.mock('pdf-parse', () => ({
   __esModule: true,
-  default: jest.fn().mockResolvedValue({ text: 'John Doe, Senior Engineer, TypeScript' }),
+  default: jest.fn().mockResolvedValue({ text: 'John Doe, Senior Engineer, TypeScript. '.repeat(10) }),
 }));
 
 jest.mock('openai', () => ({
@@ -50,6 +50,8 @@ jest.mock('openai', () => ({
   }),
 }));
 
+process.env.OPENAI_API_KEY = 'test-key';
+
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -67,8 +69,10 @@ describe('parseUserCV — parser-does-not-delete contract (le8)', () => {
 
     const result = await parseUserCV(tmpPath);
 
-    // Success path was reached
-    expect(result).toBeTruthy();
+    // Success path was reached: success shape { name, resume, preferences }
+    expect(result.name).toBe('John Doe');
+    expect(result.resume.skills).toEqual(['TypeScript']);
+    expect(result.preferences.remoteOnly).toBe(true);
     // THE CONTRACT: parser did not delete the file.
     // A reintroduced `fs.unlink(uploadedFilePath)` inside parseUserCV would make this fail.
     expect(fs.existsSync(tmpPath)).toBe(true);

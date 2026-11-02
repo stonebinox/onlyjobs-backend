@@ -34,6 +34,7 @@ import {
 
 import { protect } from "../middleware/authMiddleware";
 import upload from "../middleware/fileUpload";
+import { cvUploadErrorHandler } from "../middleware/cvUploadErrors";
 import audioUpload from "../middleware/audioUpload";
 
 const router = express.Router();
@@ -65,7 +66,7 @@ router.get("/active-count", protect, getActiveUserCount);
 router.get("/skills/search", protect, searchSkills);
 router.put("/profile", protect, updateUserProfile);
 router.get("/profile", protect, getUserProfile);
-router.post("/cv", protect, upload.single("file"), updateUserCV);
+router.post("/cv", protect, upload.single("file"), cvUploadErrorHandler, updateUserCV);
 router.get("/question", protect, getQuestion);
 router.post("/answer", protect, setUserAnswer);
 router.post(

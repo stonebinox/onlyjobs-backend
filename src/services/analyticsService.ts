@@ -144,6 +144,31 @@ export const captureLifecycleEvent = (
   }
 };
 
+export const captureCvUploadAttempt = (
+  userId: string,
+  props: { outcome: string; reason: string; retryable: boolean; fileType?: string }
+): void => {
+  console.log(
+    `[CV-UPLOAD] outcome=${props.outcome} reason=${props.reason} retryable=${props.retryable} fileType=${props.fileType ?? "unknown"}`
+  );
+  try {
+    const client = getClient();
+    if (!client) return;
+    client.capture({
+      distinctId: userId,
+      event: "cv_upload_attempt",
+      properties: {
+        outcome: props.outcome,
+        reason: props.reason,
+        retryable: props.retryable,
+        fileType: props.fileType ?? "unknown",
+      },
+    });
+  } catch (err) {
+    console.error("[analytics] captureCvUploadAttempt failed:", err);
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Graceful shutdown — flush batched events before process exit
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 
 import User, { IUser } from "../models/User";
-import { captureLifecycleEvent } from "../services/analyticsService";
+import { captureCvUploadAttempt, captureLifecycleEvent } from "../services/analyticsService";
 import Transaction from "../models/Transaction";
 import {
   answerQuestion,
@@ -281,23 +281,45 @@ export const updateUserCV = asyncHandler(
   async (req: Request, res: Response) => {
     // Check if file exists in the request
     if (!req.file) {
+      captureCvUploadAttempt(req.user!.id, { outcome: "missing_file", reason: "missing_file", retryable: false });
       res.status(400);
       throw new Error("Please upload a file");
     }
 
     const userId = req.user!.id;
     const file = req.file;
+    const fileExt = path.extname(file.originalname || "").toLowerCase().replace(".", "");
+    const fileType = fileExt || "unknown";
 
-    // Check file type
-    const allowedFileTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-
-    if (!allowedFileTypes.includes(file.mimetype)) {
-      res.status(400);
-      throw new Error("Please upload a PDF or Word document");
-    }
+    const failParse = (
+      code: "unreadable" | "invalid_output" | "transient" | "unsupported_type"
+    ) => {
+      const retryable = code === "transient";
+      captureCvUploadAttempt(userId, { outcome: code, reason: code, retryable, fileType });
+      if (code === "unsupported_type") {
+        res.status(400).json({
+          success: false,
+          code,
+          retryable: false,
+          message: "Please upload a PDF or Word document.",
+        });
+      } else if (retryable) {
+        res.status(503).json({
+          success: false,
+          code,
+          retryable: true,
+          message: "We hit a temporary problem reading your CV. Please try again in a moment.",
+        });
+      } else {
+        res.status(422).json({
+          success: false,
+          code,
+          retryable: false,
+          message:
+            "We couldn't read a resume from that file. If it's a scanned image, upload a text-based PDF or DOCX, or fill in the quick profile.",
+        });
+      }
+    };
 
     let filePath: string | undefined;
     try {
@@ -307,17 +329,31 @@ export const updateUserCV = asyncHandler(
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
-      const fileExtension = path.extname(file.originalname);
-      const fileName = `${userId}-${Date.now()}${fileExtension}`;
+      const fileExtension = path.extname(file.originalname || "");
+      const fileName = `${userId}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${fileExtension}`;
       filePath = path.join(uploadDir, fileName);
       fs.writeFileSync(filePath, file.buffer);
-      const parsedCV = await parseUserCV(filePath);
 
-      if (!parsedCV) {
-        res.status(422).json({
-          success: false,
-          message: "We couldn't read that CV. Please try another PDF or DOCX file.",
-        });
+      let parsedCV: Awaited<ReturnType<typeof parseUserCV>> | null;
+      try {
+        parsedCV = await parseUserCV(filePath);
+      } catch (e) {
+        const code = (e as { name?: unknown; code?: unknown } | null)?.code;
+        if (
+          (e as { name?: unknown } | null)?.name === "CvParseError" &&
+          (code === "unreadable" ||
+            code === "invalid_output" ||
+            code === "transient" ||
+            code === "unsupported_type")
+        ) {
+          failParse(code);
+          return;
+        }
+        throw e;
+      }
+
+      if (!parsedCV || !hasMeaningfulResume(parsedCV.resume)) {
+        failParse("unreadable");
         return;
       }
 
@@ -349,16 +385,20 @@ export const updateUserCV = asyncHandler(
         throw new Error("User not found");
       }
 
-      if (hasMeaningfulResume(parsedCV.resume)) {
+      try {
         await resetNoResumeReminderState(userId);
+      } catch (resetError) {
+        console.error("[CV-UPLOAD] reminder reset failed after CV saved", resetError);
       }
 
+      captureCvUploadAttempt(userId, { outcome: "ok", reason: "ok", retryable: false, fileType });
       res.status(200).json({
         success: true,
         message: "CV uploaded successfully",
       });
     } catch (error) {
       console.error("Error saving CV:", error);
+      captureCvUploadAttempt(userId, { outcome: "server_error", reason: "server_error", retryable: false, fileType });
       res.status(500);
       throw new Error("Error saving CV");
     } finally {

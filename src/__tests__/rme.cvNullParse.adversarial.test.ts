@@ -23,7 +23,7 @@
  *     [6c] Allowlist: hallucinated matchingEnabled / minScore in parsed prefs are ignored.
  *
  *   EMPTY-RESUME PATH (parseUserCV returns object with empty/whitespace resume, NOT null):
- *     [7] HTTP 200 (parse succeeded, just empty); noResumeReminderCount unchanged.
+ *     [7] HTTP 422 (empty resume is not a usable parse, xhbu); noResumeReminderCount unchanged.
  */
 
 // ── Mocks (hoisted by Jest before all imports) ────────────────────────────────
@@ -486,10 +486,9 @@ describe('rme: preference allowlist and presence semantics on success path (crit
 
 // ── SUITE 6: Empty resume (not null) → 200, no reset (criterion 7) ───────────
 
-describe('rme: structured-but-empty resume (NOT null) returns 200 and does not reset (criterion 7)', () => {
-  it('Crit-7a [empty resume → 200 not 422]: empty object resume is a parse success, not failure', async () => {
-    // Distinct from null: object with empty resume = parser succeeded with empty output.
-    // Must return 200, not 422.
+describe('rme: structured-but-empty resume (NOT null) returns 422 and does not reset (criterion 7)', () => {
+  it('Crit-7a [empty resume → 422 not 200]: empty object resume is not a usable CV (xhbu)', async () => {
+    // xhbu: an empty resume must never be reported as a successful upload.
     const user = await setupUser({
       noResumeReminderCount: 5,
       lastNoResumeReminderAt: new Date('2026-08-08T12:00:00Z'),
@@ -503,9 +502,8 @@ describe('rme: structured-but-empty resume (NOT null) returns 200 and does not r
 
     const res = await uploadCV();
 
-    // FINDING if 422: implementation incorrectly treated empty resume as parse failure.
-    expect(res.status).toBe(200);
-    expect(res.status).not.toBe(422);
+    // FINDING if 200: empty resume reported as success.
+    expect(res.status).toBe(422);
 
     const after = await User.findById(user._id);
     // FINDING if 0: resetNoResumeReminderState was called despite no meaningful resume.
@@ -513,7 +511,7 @@ describe('rme: structured-but-empty resume (NOT null) returns 200 and does not r
     expect(after!.lastNoResumeReminderAt).toBeDefined();
   });
 
-  it('Crit-7b [whitespace resume → 200, no reset]: whitespace-only summary is not meaningful', async () => {
+  it('Crit-7b [whitespace resume → 422, no reset]: whitespace-only summary is not meaningful', async () => {
     const user = await setupUser({
       noResumeReminderCount: 3,
       lastNoResumeReminderAt: new Date('2026-08-01T00:00:00Z'),
@@ -537,7 +535,7 @@ describe('rme: structured-but-empty resume (NOT null) returns 200 and does not r
     } as any);
 
     const res = await uploadCV();
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
 
     const after = await User.findById(user._id);
     // FINDING if 0: whitespace treated as meaningful, triggering reset.
@@ -545,7 +543,7 @@ describe('rme: structured-but-empty resume (NOT null) returns 200 and does not r
     expect(after!.lastNoResumeReminderAt).toBeDefined();
   });
 
-  it('Crit-7c [null vs empty boundary]: null → 422 AND empty → 200 (same test, both branches)', async () => {
+  it('Crit-7c [null vs empty boundary]: null → 422 AND empty → 422 (same test, both branches)', async () => {
     // First: null path → must 422.
     const userA = await setupUser({ noResumeReminderCount: 5 });
     mockParseUserCV.mockResolvedValue(null as any);
@@ -554,11 +552,11 @@ describe('rme: structured-but-empty resume (NOT null) returns 200 and does not r
     const afterNull = await User.findById(userA._id);
     expect(afterNull!.noResumeReminderCount).toBe(5);
 
-    // Second: empty resume path → must 200, no reset.
+    // Second: empty resume path → must 422, no reset.
     const userB = await setupUser({ noResumeReminderCount: 4 });
     mockParseUserCV.mockResolvedValue({ name: 'Test', resume: EMPTY_RESUME, preferences: {} } as any);
     const resEmpty = await uploadCV();
-    expect(resEmpty.status).toBe(200);
+    expect(resEmpty.status).toBe(422);
     const afterEmpty = await User.findById(userB._id);
     expect(afterEmpty!.noResumeReminderCount).toBe(4);
   });

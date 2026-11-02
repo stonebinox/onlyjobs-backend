@@ -237,7 +237,7 @@ describe("l5j: CV upload with empty/whitespace resume does NOT reset (criterion 
       .set('Authorization', `Bearer ${token}`)
       .attach('file', dummyPDF, { filename: 'empty.pdf', contentType: 'application/pdf' });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
 
     const updated = await User.findById(user._id);
     expect(updated!.noResumeReminderCount).toBe(5);
@@ -258,7 +258,7 @@ describe("l5j: CV upload with empty/whitespace resume does NOT reset (criterion 
       .set('Authorization', `Bearer ${token}`)
       .attach('file', dummyPDF, { filename: 'whitespace.pdf', contentType: 'application/pdf' });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
 
     const updated = await User.findById(user._id);
     expect(updated!.noResumeReminderCount).toBe(3);

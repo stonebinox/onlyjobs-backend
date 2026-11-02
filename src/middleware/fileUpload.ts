@@ -1,25 +1,19 @@
 import multer from "multer";
 
+export const UNSUPPORTED_TYPE_MESSAGE = "Only PDF and Word documents are allowed";
+
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
 
-// File filter function to validate file types
+// Accept every file type here: multer's memory storage gives the filter no file
+// buffer, so it cannot sniff content. The magic-byte check in parseUserCV is the
+// authoritative gate. Calls cb exactly once.
 const fileFilter = (
   req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  // Accept pdf, docx
-  if (
-    file.mimetype === "application/pdf" ||
-    file.mimetype ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  ) {
-    cb(null, true);
-  } else {
-    cb(null, false);
-    return cb(new Error("Only PDF and Word documents are allowed!"));
-  }
+  cb(null, true);
 };
 
 // Create the multer instance with configuration

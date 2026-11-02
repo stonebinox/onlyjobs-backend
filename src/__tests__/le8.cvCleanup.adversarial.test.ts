@@ -165,7 +165,7 @@ describe('le8 — CV upload temp file cleanup (adversarial)', () => {
       expect(res.body.success).toBe(false);
       // This message is part of the requirement — assert exactly
       expect(res.body.message).toBe(
-        "We couldn't read that CV. Please try another PDF or DOCX file."
+        "We couldn't read a resume from that file. If it's a scanned image, upload a text-based PDF or DOCX, or fill in the quick profile."
       );
     });
 
