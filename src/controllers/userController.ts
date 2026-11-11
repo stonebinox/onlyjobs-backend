@@ -28,6 +28,7 @@ import { deleteSignalsForUser } from "../services/rejectionSignalService";
 import MatchRecord from "../models/MatchRecord";
 import JobListing, { IJobListing } from "../models/JobListing";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
+import { enqueueCompleteRegistration, regEventId, sanitizeMetaClick } from "../utils/metaEvents";
 import { resetNoResumeReminderState } from "../utils/resumeState";
 import {
   sendEmailChangeVerificationEmail,
@@ -54,6 +55,9 @@ interface AttributionDoc {
   referringDomain?: string;
   landingPath?: string;
   firstSeenAt?: Date;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
 }
 
 export function sanitizeAttribution(raw: unknown): AttributionDoc | undefined {
@@ -113,6 +117,8 @@ export function sanitizeAttribution(raw: unknown): AttributionDoc | undefined {
       }
     }
   }
+
+  Object.assign(result, sanitizeMetaClick(r));
 
   // Derive source server-side (do not trust client)
   const hasUtm = !!(
@@ -195,6 +201,16 @@ export const authenticateUser = asyncHandler(
         // omit attribution on any error
       }
 
+      // Meta click ids travel in their own request key (not the first-touch blob)
+      const metaClick = sanitizeMetaClick(req.body.metaClick);
+      if (metaClick) {
+        sanitizedAttribution = {
+          source: "direct",
+          ...sanitizedAttribution,
+          ...metaClick,
+        };
+      }
+
       const createPayload: Record<string, unknown> = {
         email,
         password: encryptedPassword,
@@ -223,6 +239,7 @@ export const authenticateUser = asyncHandler(
       });
 
       isNewUser = true;
+      await enqueueCompleteRegistration(user, { ip: req.ip, ua: req.get("user-agent") });
       // Send verification email to new user
       await sendInitialVerificationEmail(user.email, verificationToken);
     } else {
@@ -246,6 +263,7 @@ export const authenticateUser = asyncHandler(
       id: user.id,
       token: token,
       isNewUser,
+      ...(isNewUser ? { metaEventId: regEventId(user._id) } : {}),
     });
   }
 );

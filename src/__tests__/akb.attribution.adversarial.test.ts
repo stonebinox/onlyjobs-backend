@@ -535,6 +535,9 @@ describe("SCHEMA-SHAPE PIN: attribution subdoc fields (backend)", () => {
     "referringDomain",
     "landingPath",
     "firstSeenAt",
+    "fbclid",
+    "fbc",
+    "fbp",
   ];
 
   it("attribution subdoc has exactly the canonical field set (no additions, no removals)", () => {

@@ -25,6 +25,8 @@ import {
   toSignalSummary,
 } from "../services/rejectionSignalService";
 import { hasMeaningfulResume } from "../utils/resumePredicate";
+import { hasVisibleBriefMatch } from "../utils/todayEligibility";
+import { actEventId, enqueueActivated } from "../utils/metaEvents";
 
 // Categories the system writes itself; a user may not submit them as a rejection reason
 const RESERVED_REASON_CATEGORIES = ["relevance"];
@@ -186,6 +188,49 @@ export const getMatches = expressAsyncHandler(
     const matches = await getMatchesData(userId, minScore);
 
     res.json(matches);
+  }
+);
+
+// @desc    Record first activation (brief rendered at least one match card)
+// @route   POST /api/matches/activation
+// @access  Private
+export const recordActivation = expressAsyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const metaEventId = actEventId(user._id);
+
+    if (user.metaActivatedAt) {
+      res.json({ activated: false, alreadyActivated: true, metaEventId });
+      return;
+    }
+    if (!hasMeaningfulResume(user.resume)) {
+      res.json({ activated: false, reason: "no_resume" });
+      return;
+    }
+    if (!(await hasVisibleBriefMatch(user._id, user.preferences?.minScore))) {
+      res.json({ activated: false, reason: "no_visible_match" });
+      return;
+    }
+
+    const activatedAt = new Date();
+    const claimed = await User.findOneAndUpdate(
+      { _id: user._id, metaActivatedAt: null },
+      { $set: { metaActivatedAt: activatedAt } },
+      { new: true }
+    );
+    if (!claimed) {
+      res.json({ activated: false, alreadyActivated: true, metaEventId });
+      return;
+    }
+
+    await enqueueActivated(claimed, activatedAt, { ip: req.ip, ua: req.get("user-agent") });
+    res.json({ activated: true, metaEventId });
   }
 );
 

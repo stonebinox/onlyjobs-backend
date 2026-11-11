@@ -17,6 +17,10 @@ export interface IAttribution {
   referringDomain?: string;
   landingPath?: string;
   firstSeenAt?: Date;
+  // onlyjobs-6a4p: Meta click identifiers (validated server-side)
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
 }
 
 export interface IUser extends Document {
@@ -75,6 +79,7 @@ export interface IUser extends Document {
   lastNoResumeReminderAt?: Date;
   matchingDisabledReason?: "auto_low_balance" | "user";
   attribution?: IAttribution;
+  metaActivatedAt?: Date; // onlyjobs-6a4p: set once when the first brief match is shown
   guideProgress?: Map<
     string,
     {
@@ -167,9 +172,13 @@ const UserSchema: Schema = new Schema(
         referringDomain: String,
         landingPath: String,
         firstSeenAt: Date,
+        fbclid: String,
+        fbc: String,
+        fbp: String,
       },
       default: undefined,
     },
+    metaActivatedAt: { type: Date },
     guideProgress: {
       type: Map,
       of: {

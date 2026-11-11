@@ -10,6 +10,7 @@ import {
 } from "../services/razorpayService";
 import { reconcilePostCreditWalletState } from "../utils/walletState";
 import { creditTransactionOnce } from "../utils/creditWallet";
+import { purchaseClientFields, sanitizeMetaClick } from "../utils/metaEvents";
 
 /**
  * Get current wallet balance for authenticated user
@@ -59,6 +60,7 @@ export const createPaymentOrder = asyncHandler(
       const receipt = `wlt_${shortUserId}_${timestamp}`;
 
       const order = await createOrder(amount, receipt);
+      const metaClick = sanitizeMetaClick(req.body.metaClick);
 
       // Create pending transaction record
       await Transaction.create({
@@ -70,6 +72,10 @@ export const createPaymentOrder = asyncHandler(
         status: "pending",
         metadata: {
           orderDetails: order,
+          ...(metaClick?.fbc ? { fbc: metaClick.fbc } : {}),
+          ...(metaClick?.fbp ? { fbp: metaClick.fbp } : {}),
+          ...(req.ip ? { clientIp: req.ip } : {}),
+          ...(req.get("user-agent") ? { clientUa: req.get("user-agent")!.slice(0, 512) } : {}),
         },
       });
 
@@ -127,6 +133,9 @@ export const verifyAndCreditWallet = asyncHandler(
         success: true,
         message: "Payment verified and wallet credited",
         newBalance: result.newBalance,
+        metaEventId: result.metaEventId,
+        value: result.value,
+        currency: result.currency,
       });
     } else {
       // Already credited by another path — idempotent success
@@ -135,6 +144,9 @@ export const verifyAndCreditWallet = asyncHandler(
         success: true,
         message: "Payment already processed",
         newBalance: user?.walletBalance ?? 0,
+        metaEventId: result.metaEventId,
+        value: result.value,
+        currency: result.currency,
       });
     }
   }
@@ -468,6 +480,7 @@ export const syncTransactionStatus = asyncHandler(
       res.json({
         status: transaction.status,
         message: `Transaction is ${transaction.status}`,
+        ...purchaseClientFields(transaction),
       });
       return;
     }
