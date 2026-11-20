@@ -8,6 +8,7 @@ export enum MatchRunOutcome {
   SKIPPED_INSUFFICIENT_BALANCE = "skipped_insufficient_balance",
   SKIPPED_NO_JOBS = "skipped_no_jobs",
   RUN_FAILED_PARTIAL = "run_failed_partial",
+  SKIPPED_LOCKED = "skipped_locked",
 }
 
 export interface IMatchRunLog extends Document {

@@ -735,6 +735,26 @@ export const triggerMatchForMe = expressAsyncHandler(
         body: JSON.stringify({ userId }),
       });
 
+      if (response.status === 409) {
+        // A match run is already in progress for this user: not a real attempt, so don't burn the cooldown.
+        let retryAfterMinutes = 20;
+        try {
+          const body = (await response.json()) as { retryAfterMinutes?: number };
+          if (typeof body.retryAfterMinutes === "number" && body.retryAfterMinutes > 0) {
+            retryAfterMinutes = body.retryAfterMinutes;
+          }
+        } catch {
+          // keep the default hint
+        }
+        await rollbackClaim();
+        res.status(409).json({
+          message: `A match run is already in progress for you, try again in ${retryAfterMinutes} minutes.`,
+          reason: "lease_held",
+          retryAfterMinutes,
+        });
+        return;
+      }
+
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[TRIGGER] Background service error: ${errText}`);

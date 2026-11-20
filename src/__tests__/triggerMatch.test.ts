@@ -225,6 +225,25 @@ describe('POST /api/matches/trigger-for-me — dispatch and rollback', () => {
     expect(user?.lastManualMatchAt).toBeUndefined();
   });
 
+  it('returns 409 with a friendly message and rolls back cooldown when background reports lease_held', async () => {
+    await createTestUser();
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ reason: 'lease_held', retryAfterMinutes: 7 }),
+      text: async () => '',
+    } as unknown as Response);
+
+    const res = await request(testApp).post('/api/matches/trigger-for-me');
+
+    expect(res.status).toBe(409);
+    expect(res.body.reason).toBe('lease_held');
+    expect(res.body.retryAfterMinutes).toBe(7);
+    expect(res.body.message).toContain('7 minutes');
+    const user = await User.findById(testUserId);
+    expect(user?.lastManualMatchAt).toBeUndefined();
+  });
+
   it('returns 502 and rolls back cooldown when background service is unreachable (fetch throws)', async () => {
     await createTestUser();
     mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));

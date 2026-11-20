@@ -162,13 +162,16 @@ export const getTransactions = asyncHandler(
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    const transactions = await Transaction.find({ userId })
+    // Pending debits are in-flight daily-fee claims, not charges the user has incurred yet.
+    const visibleFilter = { userId, $nor: [{ type: "debit", status: "pending" }] };
+
+    const transactions = await Transaction.find(visibleFilter)
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit)
       .select("-razorpaySignature -metadata");
 
-    const total = await Transaction.countDocuments({ userId });
+    const total = await Transaction.countDocuments(visibleFilter);
 
     res.json({
       transactions,

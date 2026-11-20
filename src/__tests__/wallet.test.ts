@@ -256,6 +256,18 @@ describe('GET /api/wallet/transactions', () => {
     expect(res.body.pagination.total).toBe(1);
   });
 
+  it('excludes pending debits (in-flight daily-fee claims) but keeps completed debits', async () => {
+    await Transaction.create({ userId: testUserId, type: 'debit', amount: 0.3, description: 'claim', status: 'pending', chargeKey: 'daily:u:2026-01-01' });
+    await Transaction.create({ userId: testUserId, type: 'debit', amount: 0.3, description: 'fee', status: 'completed' });
+    await Transaction.create({ userId: testUserId, type: 'credit', amount: 10, description: 'Top-up', status: 'pending' });
+
+    const res = await request(testApp).get('/api/wallet/transactions');
+    expect(res.status).toBe(200);
+    expect(res.body.transactions).toHaveLength(2);
+    expect(res.body.pagination.total).toBe(2);
+    expect(res.body.transactions.some((t: any) => t.description === 'claim')).toBe(false);
+  });
+
   it('respects pagination parameters', async () => {
     for (let i = 0; i < 5; i++) {
       await Transaction.create({

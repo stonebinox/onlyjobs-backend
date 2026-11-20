@@ -5,9 +5,14 @@ dotenv.config();
 import connectDB from "./utils/connectDB";
 import { shutdownAnalytics } from "./services/analyticsService";
 import { startMetaDrainWorker, stopMetaDrainWorker } from "./services/metaDrainWorker";
+import Transaction from "./models/Transaction";
 import app from "./app";
 
-connectDB();
+// Build the unique partial chargeKey index (daily-fee idempotency) once the DB is up, and log it.
+connectDB()
+  .then(() => Transaction.createIndexes())
+  .then(() => console.log("[BOOT] Transaction indexes ensured"))
+  .catch((err) => console.error("[BOOT] ERROR: failed to create Transaction indexes:", err));
 startMetaDrainWorker();
 
 const PORT = process.env.PORT || 5000;
